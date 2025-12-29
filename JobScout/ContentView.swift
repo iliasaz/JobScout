@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selectedCategories: Set<String> = []
     @State private var savedJobCount: Int = 0
     @State private var lastSaveInfo: String?
+    @State private var showingClearConfirmation = false
 
     private let parser = DeterministicTableParser()
     private let repository = JobRepository()
@@ -232,6 +233,29 @@ struct ContentView: View {
         .onAppear {
             loadSavedJobCount()
         }
+        .toolbar {
+            ToolbarItem(placement: .destructiveAction) {
+                Button {
+                    showingClearConfirmation = true
+                } label: {
+                    Label("Clear Database", systemImage: "trash")
+                }
+                .disabled(savedJobCount == 0 || isLoading || isSaving)
+                .help("Delete all saved jobs from the database")
+            }
+        }
+        .confirmationDialog(
+            "Clear Database?",
+            isPresented: $showingClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete All Jobs", role: .destructive) {
+                clearDatabase()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete all \(savedJobCount) saved jobs from the database. This action cannot be undone.")
+        }
     }
 
     // MARK: - Methods
@@ -404,11 +428,31 @@ struct ContentView: View {
         Task {
             do {
                 let count = try await repository.getJobCount()
-                await MainActor.run {
-                    savedJobCount = count
-                }
+                savedJobCount = count
             } catch {
                 // Silently ignore - database might not exist yet
+            }
+        }
+    }
+
+    /// Clear all data from the database
+    private func clearDatabase() {
+        isLoading = true
+        errorMessage = nil
+        lastSaveInfo = nil
+
+        Task {
+            do {
+                try await repository.deleteAllData()
+
+                jobs = []
+                savedJobCount = 0
+                selectedCategories.removeAll()
+                analysisInfo = "Database cleared"
+                isLoading = false
+            } catch {
+                errorMessage = "Clear error: \(error.localizedDescription)"
+                isLoading = false
             }
         }
     }

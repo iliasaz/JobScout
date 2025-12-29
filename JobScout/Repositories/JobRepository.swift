@@ -403,4 +403,16 @@ actor JobRepository {
             try db.execute(sql: "DELETE FROM job_postings WHERE source_id = ?", arguments: [sourceId])
         }
     }
+
+    /// Delete all data from the database (jobs, sources, and user status)
+    func deleteAllData() async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            // Delete in order respecting foreign key constraints
+            try db.execute(sql: "DELETE FROM user_job_status")
+            try db.execute(sql: "DELETE FROM job_postings")
+            try db.execute(sql: "DELETE FROM job_sources")
+        }
+    }
 }
