@@ -133,6 +133,14 @@ struct JobScoutTests {
         #expect(format == .markdown)
     }
 
+    @Test func parserDetectsMarkdownFormatWithSpacesInSeparator() async throws {
+        // jobright.ai uses spaces around dashes in separator row
+        let parser = DeterministicTableParser()
+        let markdown = "| Company | Job Title |\n| ----- | --------- |\n| Test | Dev |"
+        let format = parser.detectFormat(markdown)
+        #expect(format == .markdown)
+    }
+
     @Test func parserExtractsJobsFromMarkdownTable() async throws {
         let parser = DeterministicTableParser()
         let markdown = """
@@ -162,6 +170,26 @@ struct JobScoutTests {
         let tables = parser.parseTables(markdown)
         let jobs = parser.extractJobs(from: tables)
         #expect(jobs.isEmpty)
+    }
+
+    @Test func parserExtractsJobsWithEmbeddedLinks() async throws {
+        // Test jobright.ai format where links are embedded in Company and Job Title columns
+        let parser = DeterministicTableParser()
+        let markdown = """
+| Company | Job Title | Location | Work Model | Date Posted |
+|---------|-----------|----------|------------|-------------|
+| **[Acme Corp](https://acme.com)** | **[Software Engineer](https://jobright.ai/jobs/123)** | San Francisco, CA | Remote | Dec 29 |
+"""
+
+        let tables = parser.parseTables(markdown)
+        #expect(tables.count == 1)
+
+        let jobs = parser.extractJobs(from: tables)
+        #expect(jobs.count == 1)
+        #expect(jobs.first?.company == "Acme Corp")
+        #expect(jobs.first?.role == "Software Engineer")
+        #expect(jobs.first?.location == "San Francisco, CA")
+        #expect(jobs.first?.companyLink == "https://jobright.ai/jobs/123")
     }
 
     // MARK: - ColumnMapping Tests

@@ -128,6 +128,13 @@ nonisolated struct ColumnMapping: Sendable {
             }
         }
 
+        // Check role column for job links (some formats embed links in role/title column)
+        let rawRoleValue = row[roleIdx]
+        if companyLink == nil {
+            let roleLinks = Self.extractLinks(from: rawRoleValue)
+            companyLink = roleLinks.first { !$0.contains("simplify.jobs") }
+        }
+
         // Also check company column for links (sometimes company name is a link)
         if companyLink == nil {
             let companyLinks = Self.extractLinks(from: rawCompanyValue)
@@ -169,13 +176,20 @@ nonisolated struct ColumnMapping: Sendable {
         return links
     }
 
-    /// Removes link markers from cell content for display
+    /// Removes link markers and markdown formatting from cell content for display
     private static func cleanValue(_ value: String?) -> String {
         guard let value = value else { return "" }
-        return value.replacingOccurrences(
+        var result = value
+        // Remove link markers [[LINK:url]]
+        result = result.replacingOccurrences(
             of: "\\[\\[LINK:[^\\]]+\\]\\]",
             with: "",
             options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        // Remove markdown bold markers **
+        result = result.replacingOccurrences(of: "**", with: "")
+        // Remove markdown italic markers (single *)
+        result = result.replacingOccurrences(of: "\\*([^*]+)\\*", with: "$1", options: .regularExpression)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

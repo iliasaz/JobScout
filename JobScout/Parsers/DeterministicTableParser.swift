@@ -24,7 +24,7 @@ nonisolated struct DeterministicTableParser: Sendable {
             of: "\\|[^|]+\\|[^|]+\\|",
             options: .regularExpression
         ) != nil && content.range(
-            of: "\\|[-:]+\\|",
+            of: "\\|\\s*[-:]+\\s*\\|",
             options: .regularExpression
         ) != nil
 
