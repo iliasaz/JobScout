@@ -202,7 +202,7 @@ struct ContentView: View {
                         Text(job.datePosted ?? "-")
                     }
                     .width(min: 50, ideal: 80)
-                    TableColumn("Apply") { job in
+                    TableColumn("Company Site") { job in
                         if let link = job.companyLink, !link.isEmpty,
                            let url = URL(string: link) {
                             Link("Apply", destination: url)
@@ -212,18 +212,18 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .width(min: 50, ideal: 60)
-                    TableColumn("Job Site") { job in
+                    .width(min: 80, ideal: 100)
+                    TableColumn("Aggregator") { job in
                         if let link = job.simplifyLink, !link.isEmpty,
                            let url = URL(string: link) {
-                            Link("Apply", destination: url)
+                            Link(aggregatorName(from: link), destination: url)
                                 .foregroundStyle(.green)
                         } else {
                             Text("-")
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .width(min: 60, ideal: 70)
+                    .width(min: 70, ideal: 90)
                 }
             }
         }
@@ -274,6 +274,46 @@ struct ContentView: View {
                     isLoading = false
                 }
             }
+        }
+    }
+
+    /// Extract aggregator name from URL
+    private func aggregatorName(from urlString: String) -> String {
+        let lowercased = urlString.lowercased()
+
+        if lowercased.contains("simplify.jobs") || lowercased.contains("simplify.co") {
+            return "Simplify"
+        } else if lowercased.contains("linkedin.com") {
+            return "LinkedIn"
+        } else if lowercased.contains("indeed.com") {
+            return "Indeed"
+        } else if lowercased.contains("glassdoor.com") {
+            return "Glassdoor"
+        } else if lowercased.contains("lever.co") {
+            return "Lever"
+        } else if lowercased.contains("greenhouse.io") {
+            return "Greenhouse"
+        } else if lowercased.contains("workday.com") {
+            return "Workday"
+        } else if lowercased.contains("ziprecruiter.com") {
+            return "ZipRecruiter"
+        } else if lowercased.contains("monster.com") {
+            return "Monster"
+        } else if lowercased.contains("dice.com") {
+            return "Dice"
+        } else if lowercased.contains("wellfound.com") || lowercased.contains("angel.co") {
+            return "Wellfound"
+        } else if lowercased.contains("builtin.com") {
+            return "BuiltIn"
+        } else {
+            // Try to extract domain name
+            if let url = URL(string: urlString), let host = url.host {
+                let parts = host.split(separator: ".")
+                if parts.count >= 2 {
+                    return String(parts[parts.count - 2]).capitalized
+                }
+            }
+            return "Apply"
         }
     }
 
