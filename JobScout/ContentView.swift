@@ -11,12 +11,16 @@ struct ContentView: View {
     @State private var urlText = "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
     @State private var jobs: [JobPosting] = []
     @State private var isLoading = false
+    @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var analysisInfo: String = ""
     @State private var searchText = ""
     @State private var selectedCategories: Set<String> = []
+    @State private var savedJobCount: Int = 0
+    @State private var lastSaveInfo: String?
 
     private let parser = DeterministicTableParser()
+    private let repository = JobRepository()
 
     /// All unique categories from loaded jobs
     var availableCategories: [String] {
@@ -64,12 +68,47 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isLoading)
+                .disabled(isLoading || isSaving)
+
+                if !jobs.isEmpty {
+                    Button {
+                        saveJobsToDatabase()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isLoading || isSaving)
+                }
+
+                Button("Load Saved") {
+                    loadSavedJobs()
+                }
+                .buttonStyle(.bordered)
+                .disabled(isLoading || isSaving)
             }
 
             // Analysis Info
             if !analysisInfo.isEmpty {
                 Text(analysisInfo)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Save Info
+            if let saveInfo = lastSaveInfo {
+                Text(saveInfo)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+
+            // Database Status
+            if savedJobCount > 0 {
+                Text("Database: \(savedJobCount) jobs saved")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -190,6 +229,9 @@ struct ContentView: View {
         }
         .padding()
         .frame(minWidth: 800, minHeight: 600)
+        .onAppear {
+            loadSavedJobCount()
+        }
     }
 
     // MARK: - Methods
@@ -250,6 +292,88 @@ struct ContentView: View {
         components.remove(at: 2)
         let rawPath = components.joined(separator: "/")
         return URL(string: "https://raw.githubusercontent.com/\(rawPath)")
+    }
+
+    /// Save current jobs to database
+    private func saveJobsToDatabase() {
+        guard !jobs.isEmpty else { return }
+
+        isSaving = true
+        lastSaveInfo = nil
+        errorMessage = nil
+
+        Task {
+            do {
+                // Get or create source from current URL
+                let sourceName = URL(string: urlText)?.lastPathComponent ?? "Unknown"
+                let source = try await repository.getOrCreateSource(url: urlText, name: sourceName)
+
+                // Save jobs
+                let savedCount = try await repository.saveJobs(jobs, sourceId: source.id)
+
+                // Update last fetched timestamp
+                try await repository.updateLastFetched(sourceId: source.id)
+
+                // Get total count
+                let totalCount = try await repository.getJobCount()
+
+                await MainActor.run {
+                    savedJobCount = totalCount
+                    lastSaveInfo = "Saved \(savedCount) new jobs (total: \(totalCount))"
+                    isSaving = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Save error: \(error.localizedDescription)"
+                    isSaving = false
+                }
+            }
+        }
+    }
+
+    /// Load jobs from database
+    private func loadSavedJobs() {
+        isLoading = true
+        errorMessage = nil
+        analysisInfo = ""
+        lastSaveInfo = nil
+
+        Task {
+            do {
+                let persistedJobs = try await repository.getJobs()
+
+                // Convert to JobPosting
+                let loadedJobs = persistedJobs.map { $0.toJobPosting() }
+                let totalCount = try await repository.getJobCount()
+
+                await MainActor.run {
+                    jobs = loadedJobs
+                    savedJobCount = totalCount
+                    selectedCategories.removeAll()
+                    analysisInfo = "Loaded \(loadedJobs.count) jobs from database"
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Load error: \(error.localizedDescription)"
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    /// Load saved job count on appear
+    private func loadSavedJobCount() {
+        Task {
+            do {
+                let count = try await repository.getJobCount()
+                await MainActor.run {
+                    savedJobCount = count
+                }
+            } catch {
+                // Silently ignore - database might not exist yet
+            }
+        }
     }
 }
 
