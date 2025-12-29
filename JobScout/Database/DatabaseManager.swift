@@ -179,6 +179,58 @@ actor DatabaseManager {
             }
         }
 
+        // Migration 4: Rename simplify_link to aggregator_link and add aggregator_name
+        migrator.registerMigration("004_RenameSimplifyToAggregator") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            // Add aggregator_link column if it doesn't exist
+            if !columnNames.contains("aggregator_link") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "aggregator_link" TEXT
+                    """)
+
+                // Copy data from simplify_link if it exists
+                if columnNames.contains("simplify_link") {
+                    try db.execute(sql: """
+                        UPDATE job_postings SET aggregator_link = simplify_link
+                        """)
+                }
+            }
+
+            // Add aggregator_name column if it doesn't exist
+            if !columnNames.contains("aggregator_name") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "aggregator_name" TEXT
+                    """)
+
+                // Infer aggregator name from aggregator_link
+                try db.execute(sql: """
+                    UPDATE job_postings SET aggregator_name = 'Simplify'
+                    WHERE aggregator_link LIKE '%simplify.jobs%' OR aggregator_link LIKE '%simplify.co%'
+                    """)
+                try db.execute(sql: """
+                    UPDATE job_postings SET aggregator_name = 'Jobright'
+                    WHERE aggregator_link LIKE '%jobright.ai%'
+                    """)
+                try db.execute(sql: """
+                    UPDATE job_postings SET aggregator_name = 'LinkedIn'
+                    WHERE aggregator_link LIKE '%linkedin.com%'
+                    """)
+                try db.execute(sql: """
+                    UPDATE job_postings SET aggregator_name = 'Indeed'
+                    WHERE aggregator_link LIKE '%indeed.com%'
+                    """)
+                try db.execute(sql: """
+                    UPDATE job_postings SET aggregator_name = 'Glassdoor'
+                    WHERE aggregator_link LIKE '%glassdoor.com%'
+                    """)
+            }
+
+            // Note: We don't drop simplify_link to avoid data loss
+            // SQLite doesn't support DROP COLUMN easily
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

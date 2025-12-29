@@ -21,8 +21,10 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     var category: String
     @Column("company_link")
     var companyLink: String?
-    @Column("simplify_link")
-    var simplifyLink: String?
+    @Column("aggregator_link")
+    var aggregatorLink: String?
+    @Column("aggregator_name")
+    var aggregatorName: String?
     @Column("unique_link")
     var uniqueLink: String
     @Column("date_posted")
@@ -40,7 +42,7 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     /// Convert from in-memory JobPosting
     static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
         // unique_link is required - prefer company link, fall back to aggregator link
-        guard let uniqueLink = job.companyLink ?? job.simplifyLink else {
+        guard let uniqueLink = job.companyLink ?? job.aggregatorLink else {
             return nil
         }
         return Draft(
@@ -51,7 +53,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             country: job.country,
             category: job.category,
             companyLink: job.companyLink,
-            simplifyLink: job.simplifyLink,
+            aggregatorLink: job.aggregatorLink,
+            aggregatorName: job.aggregatorName,
             uniqueLink: uniqueLink,
             datePosted: job.datePosted,
             notes: job.notes,
@@ -71,7 +74,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             country: country,
             category: category,
             companyLink: companyLink,
-            simplifyLink: simplifyLink,
+            aggregatorLink: aggregatorLink,
+            aggregatorName: aggregatorName,
             datePosted: datePosted,
             notes: notes,
             isFAANG: isFAANG,

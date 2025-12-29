@@ -504,7 +504,7 @@ nonisolated struct DeterministicTableParser: Sendable {
 
                     // Skip inactive/locked postings (rows without any valid links)
                     let hasValidLink = (job.companyLink != nil && !job.companyLink!.isEmpty) ||
-                                       (job.simplifyLink != nil && !job.simplifyLink!.isEmpty)
+                                       (job.aggregatorLink != nil && !job.aggregatorLink!.isEmpty)
                     guard hasValidLink else { continue }
 
                     // Deduplicate based on job id

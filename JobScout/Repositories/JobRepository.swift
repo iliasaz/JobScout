@@ -96,7 +96,7 @@ actor JobRepository {
 
             for job in jobs {
                 // Compute unique_link: prefer company link, fall back to aggregator link
-                guard let uniqueLink = job.companyLink ?? job.simplifyLink else {
+                guard let uniqueLink = job.companyLink ?? job.aggregatorLink else {
                     // Skip jobs without any link - can't uniquely identify them
                     continue
                 }
@@ -106,9 +106,9 @@ actor JobRepository {
                     try db.execute(sql: """
                         INSERT INTO job_postings (
                             source_id, company, role, location, country, category,
-                            company_link, simplify_link, unique_link, date_posted, notes, is_faang, is_internship,
+                            company_link, aggregator_link, aggregator_name, unique_link, date_posted, notes, is_faang, is_internship,
                             created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                         """, arguments: [
                             sourceId,
                             job.company,
@@ -117,7 +117,8 @@ actor JobRepository {
                             job.country,
                             job.category,
                             job.companyLink,
-                            job.simplifyLink,
+                            job.aggregatorLink,
+                            job.aggregatorName,
                             uniqueLink,
                             job.datePosted,
                             job.notes,
@@ -136,7 +137,8 @@ actor JobRepository {
                             country = ?,
                             category = ?,
                             company_link = ?,
-                            simplify_link = COALESCE(?, simplify_link),
+                            aggregator_link = COALESCE(?, aggregator_link),
+                            aggregator_name = COALESCE(?, aggregator_name),
                             date_posted = COALESCE(?, date_posted),
                             notes = COALESCE(?, notes),
                             is_faang = ?,
@@ -151,7 +153,8 @@ actor JobRepository {
                             job.country,
                             job.category,
                             job.companyLink,
-                            job.simplifyLink,
+                            job.aggregatorLink,
+                            job.aggregatorName,
                             job.datePosted,
                             job.notes,
                             job.isFAANG ? 1 : 0,
@@ -361,7 +364,8 @@ actor JobRepository {
             country: row["country"],
             category: row["category"],
             companyLink: row["company_link"],
-            simplifyLink: row["simplify_link"],
+            aggregatorLink: row["aggregator_link"],
+            aggregatorName: row["aggregator_name"],
             uniqueLink: row["unique_link"],
             datePosted: row["date_posted"],
             notes: row["notes"],

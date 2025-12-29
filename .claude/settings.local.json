@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "Bash(open:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:swiftpackageindex.com)",
+      "Bash(xcrun xcresulttool:*)",
+      "Bash(swift -e:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}

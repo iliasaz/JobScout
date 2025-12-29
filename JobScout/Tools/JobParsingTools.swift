@@ -163,8 +163,8 @@ nonisolated struct ExtractJobsTool: Tool {
             if let link = job.companyLink, !link.isEmpty {
                 result += "   Apply: \(link)\n"
             }
-            if let link = job.simplifyLink, !link.isEmpty {
-                result += "   Simplify: \(link)\n"
+            if let link = job.aggregatorLink, !link.isEmpty {
+                result += "   Aggregator: \(link)\n"
             }
             if let notes = job.notes, !notes.isEmpty {
                 result += "   Notes: \(notes)\n"

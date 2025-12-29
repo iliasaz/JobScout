@@ -244,9 +244,9 @@ struct ContentView: View {
                     }
                     .width(min: 80, ideal: 100)
                     TableColumn("Aggregator") { job in
-                        if let link = job.simplifyLink, !link.isEmpty,
+                        if let link = job.aggregatorLink, !link.isEmpty,
                            let url = URL(string: link) {
-                            Link(aggregatorName(from: link), destination: url)
+                            Link(job.aggregatorName ?? aggregatorName(from: link), destination: url)
                                 .foregroundStyle(.green)
                         } else {
                             Text("-")

@@ -115,13 +115,18 @@ nonisolated struct ColumnMapping: Sendable {
 
         // Extract links from link column and separate by type
         var companyLink: String?
-        var simplifyLink: String?
+        var aggregatorLink: String?
+        var aggregatorName: String?
 
         if let linkIdx = linkColumn, linkIdx < row.count {
             let links = Self.extractLinks(from: row[linkIdx])
             for link in links {
-                if link.contains("simplify.jobs") {
-                    simplifyLink = link
+                let (isAggregator, name) = Self.classifyLink(link)
+                if isAggregator {
+                    if aggregatorLink == nil {
+                        aggregatorLink = link
+                        aggregatorName = name
+                    }
                 } else if companyLink == nil && !link.isEmpty {
                     companyLink = link
                 }
@@ -132,13 +137,33 @@ nonisolated struct ColumnMapping: Sendable {
         let rawRoleValue = row[roleIdx]
         if companyLink == nil {
             let roleLinks = Self.extractLinks(from: rawRoleValue)
-            companyLink = roleLinks.first { !$0.contains("simplify.jobs") }
+            for link in roleLinks {
+                let (isAggregator, name) = Self.classifyLink(link)
+                if isAggregator {
+                    if aggregatorLink == nil {
+                        aggregatorLink = link
+                        aggregatorName = name
+                    }
+                } else if companyLink == nil {
+                    companyLink = link
+                }
+            }
         }
 
         // Also check company column for links (sometimes company name is a link)
         if companyLink == nil {
             let companyLinks = Self.extractLinks(from: rawCompanyValue)
-            companyLink = companyLinks.first { !$0.contains("simplify.jobs") }
+            for link in companyLinks {
+                let (isAggregator, name) = Self.classifyLink(link)
+                if isAggregator {
+                    if aggregatorLink == nil {
+                        aggregatorLink = link
+                        aggregatorName = name
+                    }
+                } else if companyLink == nil {
+                    companyLink = link
+                }
+            }
         }
 
         let job = JobPosting(
@@ -147,13 +172,48 @@ nonisolated struct ColumnMapping: Sendable {
             location: Self.cleanValue(location.flatMap { $0 < row.count ? row[$0] : nil } ?? ""),
             category: category,
             companyLink: companyLink,
-            simplifyLink: simplifyLink,
+            aggregatorLink: aggregatorLink,
+            aggregatorName: aggregatorName,
             datePosted: Self.cleanValue(datePosted.flatMap { $0 < row.count ? row[$0] : nil }),
             notes: Self.cleanValue(notes.flatMap { $0 < row.count ? row[$0] : nil }),
             isFAANG: actualIsFAANG
         )
 
         return (job, actualCompany, actualIsFAANG)
+    }
+
+    /// Known job aggregator domains and their display names
+    private static let aggregatorDomains: [String: String] = [
+        "simplify.jobs": "Simplify",
+        "simplify.co": "Simplify",
+        "jobright.ai": "Jobright",
+        "linkedin.com": "LinkedIn",
+        "indeed.com": "Indeed",
+        "glassdoor.com": "Glassdoor",
+        "lever.co": "Lever",
+        "greenhouse.io": "Greenhouse",
+        "workday.com": "Workday",
+        "ziprecruiter.com": "ZipRecruiter",
+        "monster.com": "Monster",
+        "dice.com": "Dice",
+        "wellfound.com": "Wellfound",
+        "angel.co": "Wellfound",
+        "builtin.com": "BuiltIn",
+        "hired.com": "Hired",
+        "otta.com": "Otta",
+        "levels.fyi": "Levels.fyi"
+    ]
+
+    /// Classify a link as company or aggregator
+    /// - Returns: Tuple of (isAggregator, aggregatorName)
+    private static func classifyLink(_ url: String) -> (isAggregator: Bool, name: String?) {
+        let lowercased = url.lowercased()
+        for (domain, name) in aggregatorDomains {
+            if lowercased.contains(domain) {
+                return (true, name)
+            }
+        }
+        return (false, nil)
     }
 
     /// Extracts all links from a cell value containing [[LINK:url]] markers

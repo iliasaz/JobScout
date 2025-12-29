@@ -11,7 +11,7 @@ import Foundation
 nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     /// Unique identifier combining all fields to ensure uniqueness
     var id: String {
-        "\(company)-\(role)-\(location)-\(companyLink ?? "")-\(datePosted ?? "")"
+        "\(company)-\(role)-\(location)-\(companyLink ?? aggregatorLink ?? "")-\(datePosted ?? "")"
     }
 
     let company: String
@@ -20,7 +20,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let country: String         // Extracted country (defaults to "USA")
     let category: String        // Job category (Software Engineering, Product Management, etc.)
     let companyLink: String?    // Direct link to company career page
-    let simplifyLink: String?   // Link to Simplify aggregator
+    let aggregatorLink: String?   // Link to job aggregator (Simplify, Jobright, etc.)
+    let aggregatorName: String?   // Name of the aggregator (e.g., "Simplify", "Jobright")
     let datePosted: String?
     let notes: String?  // Sponsorship info, requirements, etc.
     let isFAANG: Bool   // True if company is a FAANG-like company (marked with fire emoji)
@@ -33,7 +34,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         country: String? = nil,
         category: String = "Other",
         companyLink: String? = nil,
-        simplifyLink: String? = nil,
+        aggregatorLink: String? = nil,
+        aggregatorName: String? = nil,
         datePosted: String? = nil,
         notes: String? = nil,
         isFAANG: Bool = false,
@@ -47,7 +49,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.country = country ?? Self.extractCountry(from: cleanedLocation)
         self.category = category
         self.companyLink = Self.cleanLink(companyLink)
-        self.simplifyLink = Self.cleanLink(simplifyLink)
+        self.aggregatorLink = Self.cleanLink(aggregatorLink)
+        self.aggregatorName = aggregatorName
         self.datePosted = datePosted?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.isFAANG = isFAANG

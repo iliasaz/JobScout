@@ -19,7 +19,7 @@ struct JobScoutTests {
             role: "Engineer",
             location: "Remote",
             companyLink: "https://testco.com/jobs/123",
-            simplifyLink: "https://simplify.jobs/abc"
+            aggregatorLink: "https://simplify.jobs/abc"
         )
 
         // ID should include the company link
@@ -82,7 +82,7 @@ struct JobScoutTests {
             role: "Engineer",
             location: "Remote",
             companyLink: nil,
-            simplifyLink: nil
+            aggregatorLink: nil
         )
 
         let draft = PersistedJobPosting.from(job, sourceId: 1)
@@ -95,7 +95,7 @@ struct JobScoutTests {
             role: "Engineer",
             location: "Remote",
             companyLink: "https://company.com/job",
-            simplifyLink: "https://simplify.jobs/xyz"
+            aggregatorLink: "https://simplify.jobs/xyz"
         )
 
         let draft = PersistedJobPosting.from(job, sourceId: 1)
@@ -103,13 +103,13 @@ struct JobScoutTests {
         #expect(draft?.uniqueLink == "https://company.com/job")
     }
 
-    @Test func persistedJobPostingFromFallsBackToSimplifyLink() async throws {
+    @Test func persistedJobPostingFromFallsBackToAggregatorLink() async throws {
         let job = JobPosting(
             company: "TestCo",
             role: "Engineer",
             location: "Remote",
             companyLink: nil,
-            simplifyLink: "https://simplify.jobs/xyz"
+            aggregatorLink: "https://simplify.jobs/xyz"
         )
 
         let draft = PersistedJobPosting.from(job, sourceId: 1)
@@ -189,7 +189,11 @@ struct JobScoutTests {
         #expect(jobs.first?.company == "Acme Corp")
         #expect(jobs.first?.role == "Software Engineer")
         #expect(jobs.first?.location == "San Francisco, CA")
-        #expect(jobs.first?.companyLink == "https://jobright.ai/jobs/123")
+        // jobright.ai links are classified as aggregator links
+        #expect(jobs.first?.aggregatorLink == "https://jobright.ai/jobs/123")
+        #expect(jobs.first?.aggregatorName == "Jobright")
+        // acme.com is the company link
+        #expect(jobs.first?.companyLink == "https://acme.com")
     }
 
     // MARK: - ColumnMapping Tests
