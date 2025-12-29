@@ -246,33 +246,30 @@ struct ContentView: View {
         errorMessage = nil
         analysisInfo = ""
 
-        Task.detached {
+        Task {
             do {
                 let (data, _) = try await URLSession.shared.data(from: url)
                 let content = String(data: data, encoding: .utf8) ?? ""
 
-                // Parse the content
+                // Parse the content (parser is nonisolated, safe to call from any context)
                 let format = parser.detectFormat(content)
                 let tables = parser.parseTables(content)
                 let parsedJobs = parser.extractJobs(from: tables)
 
                 let info = "Format: \(format.rawValue) | Tables: \(tables.count) | Total rows: \(tables.reduce(0) { $0 + $1.rowCount })"
 
-                await MainActor.run {
-                    jobs = parsedJobs
-                    selectedCategories.removeAll()  // Reset category filters
-                    analysisInfo = info
-                    isLoading = false
+                // Update UI state (already on MainActor since Task inherits context)
+                jobs = parsedJobs
+                selectedCategories.removeAll()
+                analysisInfo = info
+                isLoading = false
 
-                    if parsedJobs.isEmpty && !tables.isEmpty {
-                        errorMessage = "Found tables but couldn't extract job postings. Headers may not match expected format."
-                    }
+                if parsedJobs.isEmpty && !tables.isEmpty {
+                    errorMessage = "Found tables but couldn't extract job postings. Headers may not match expected format."
                 }
             } catch {
-                await MainActor.run {
-                    errorMessage = "Error: \(error.localizedDescription)"
-                    isLoading = false
-                }
+                errorMessage = "Error: \(error.localizedDescription)"
+                isLoading = false
             }
         }
     }

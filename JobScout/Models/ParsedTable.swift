@@ -8,7 +8,7 @@
 import Foundation
 
 /// Detected table format
-enum TableFormat: String, Sendable, Codable {
+nonisolated enum TableFormat: String, Sendable, Codable {
     case html
     case markdown
     case mixed
@@ -16,7 +16,7 @@ enum TableFormat: String, Sendable, Codable {
 }
 
 /// Represents a parsed table with headers and rows
-struct ParsedTable: Sendable {
+nonisolated struct ParsedTable: Sendable {
     let headers: [String]
     let rows: [[String]]
     let format: TableFormat
@@ -36,7 +36,7 @@ struct ParsedTable: Sendable {
 }
 
 /// Mapping of standard field names to column indices
-struct ColumnMapping: Sendable {
+nonisolated struct ColumnMapping: Sendable {
     let company: Int?
     let role: Int?
     let location: Int?

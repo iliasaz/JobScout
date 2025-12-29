@@ -8,7 +8,8 @@
 import Foundation
 
 /// A fast, regex-based parser for HTML and Markdown tables
-struct DeterministicTableParser: Sendable {
+/// Marked nonisolated to allow use from any concurrency context
+nonisolated struct DeterministicTableParser: Sendable {
 
     // MARK: - Format Detection
 

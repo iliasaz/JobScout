@@ -10,7 +10,7 @@ import SwiftAgents
 
 // MARK: - Detect Format Tool
 
-struct DetectFormatTool: Tool {
+nonisolated struct DetectFormatTool: Tool {
     let name = "detect_format"
     let description = "Analyzes content to detect whether tables are in HTML or Markdown format"
 
@@ -54,7 +54,7 @@ struct DetectFormatTool: Tool {
 
 // MARK: - Parse Tables Tool
 
-struct ParseTablesTool: Tool {
+nonisolated struct ParseTablesTool: Tool {
     let name = "parse_tables"
     let description = "Parses all tables from content and returns structured table data with headers and rows"
 
@@ -124,7 +124,7 @@ struct ParseTablesTool: Tool {
 
 // MARK: - Extract Jobs Tool
 
-struct ExtractJobsTool: Tool {
+nonisolated struct ExtractJobsTool: Tool {
     let name = "extract_jobs"
     let description = "Extracts job postings from parsed table content and returns structured job data"
 
@@ -182,7 +182,7 @@ struct ExtractJobsTool: Tool {
 
 // MARK: - Analyze Columns Tool
 
-struct AnalyzeColumnsTool: Tool {
+nonisolated struct AnalyzeColumnsTool: Tool {
     let name = "analyze_columns"
     let description = "Analyzes table headers and suggests column mappings for job posting fields"
 

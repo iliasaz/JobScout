@@ -134,7 +134,7 @@ actor HybridJobParser {
 }
 
 /// Analysis result for content
-struct ContentAnalysis: Sendable {
+nonisolated struct ContentAnalysis: Sendable {
     let format: TableFormat
     let tableCount: Int
     let totalRows: Int

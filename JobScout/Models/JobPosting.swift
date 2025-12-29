@@ -8,7 +8,7 @@
 import Foundation
 
 /// Represents a single job posting extracted from a table
-struct JobPosting: Codable, Sendable, Identifiable, Hashable {
+nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     /// Unique identifier combining all fields to ensure uniqueness
     var id: String {
         "\(company)-\(role)-\(location)-\(companyLink ?? "")-\(datePosted ?? "")"
