@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+/// Filter for job type (intern/FAANG/all)
+enum JobTypeFilter: String, CaseIterable {
+    case all = "All"
+    case internOnly = "Intern"
+    case nonIntern = "Non-Intern"
+    case faangOnly = "FAANG"
+}
+
 struct ContentView: View {
     @State private var urlText = "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
     @State private var jobs: [JobPosting] = []
@@ -16,6 +24,7 @@ struct ContentView: View {
     @State private var analysisInfo: String = ""
     @State private var searchText = ""
     @State private var selectedCategories: Set<String> = []
+    @State private var jobTypeFilter: JobTypeFilter = .all
     @State private var savedJobCount: Int = 0
     @State private var lastSaveInfo: String?
     @State private var showingClearConfirmation = false
@@ -30,6 +39,18 @@ struct ContentView: View {
 
     var filteredJobs: [JobPosting] {
         var result = jobs
+
+        // Filter by job type (intern/FAANG/all)
+        switch jobTypeFilter {
+        case .all:
+            break
+        case .internOnly:
+            result = result.filter { $0.isInternship }
+        case .nonIntern:
+            result = result.filter { !$0.isInternship }
+        case .faangOnly:
+            result = result.filter { $0.isFAANG }
+        }
 
         // Filter by selected categories (if any selected)
         if !selectedCategories.isEmpty {
@@ -133,6 +154,15 @@ struct ContentView: View {
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
 
+                // Job type filter (intern/FAANG/all)
+                Picker("Job Type", selection: $jobTypeFilter) {
+                    ForEach(JobTypeFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 400)
+
                 // Category filters
                 if !availableCategories.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -167,7 +197,7 @@ struct ContentView: View {
                     }
                 }
 
-                Text("\(filteredJobs.count) jobs\(selectedCategories.isEmpty ? "" : " (filtered)")")
+                Text("\(filteredJobs.count) jobs\(jobTypeFilter == .all && selectedCategories.isEmpty ? "" : " (filtered)")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -182,13 +212,12 @@ struct ContentView: View {
             } else {
                 Table(filteredJobs) {
                     TableColumn("") { job in
-                        if job.isFAANG {
-                            Text("🔥")
-                        } else {
-                            Text("")
+                        HStack(spacing: 0) {
+                            Text(job.isFAANG ? "🔥" : "")
+                            Text(job.isInternship ? "🎓" : "")
                         }
                     }
-                    .width(min: 25, ideal: 30)
+                    .width(min: 30, ideal: 40)
                     TableColumn("Company", value: \.company)
                         .width(min: 100, ideal: 150)
                     TableColumn("Role", value: \.role)
@@ -231,7 +260,7 @@ struct ContentView: View {
         .padding()
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
-            loadSavedJobCount()
+            loadSavedJobs()
         }
         .toolbar {
             ToolbarItem(placement: .destructiveAction) {
@@ -285,6 +314,7 @@ struct ContentView: View {
                 // Update UI state (already on MainActor since Task inherits context)
                 jobs = parsedJobs
                 selectedCategories.removeAll()
+                jobTypeFilter = .all
                 analysisInfo = info
                 isLoading = false
 
@@ -411,6 +441,7 @@ struct ContentView: View {
                     jobs = loadedJobs
                     savedJobCount = totalCount
                     selectedCategories.removeAll()
+                    jobTypeFilter = .all
                     analysisInfo = "Loaded \(loadedJobs.count) jobs from database"
                     isLoading = false
                 }
@@ -448,6 +479,7 @@ struct ContentView: View {
                 jobs = []
                 savedJobCount = 0
                 selectedCategories.removeAll()
+                jobTypeFilter = .all
                 analysisInfo = "Database cleared"
                 isLoading = false
             } catch {

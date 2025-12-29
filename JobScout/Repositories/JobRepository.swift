@@ -87,6 +87,7 @@ actor JobRepository {
     // MARK: - Job Postings
 
     /// Save jobs from a fetch operation (upsert)
+    /// Jobs are uniquely identified by their URL (company link, or aggregator link as fallback)
     func saveJobs(_ jobs: [JobPosting], sourceId: Int) async throws -> Int {
         let db = try await dbManager.getDatabase()
 
@@ -94,14 +95,54 @@ actor JobRepository {
             var savedCount = 0
 
             for job in jobs {
-                // Try to insert, ignore if duplicate (based on unique constraint)
+                // Compute unique_link: prefer company link, fall back to aggregator link
+                guard let uniqueLink = job.companyLink ?? job.simplifyLink else {
+                    // Skip jobs without any link - can't uniquely identify them
+                    continue
+                }
+
+                // Try to insert, ignore if duplicate (based on unique_link constraint)
                 do {
                     try db.execute(sql: """
                         INSERT INTO job_postings (
                             source_id, company, role, location, country, category,
-                            company_link, simplify_link, date_posted, notes, is_faang,
+                            company_link, simplify_link, unique_link, date_posted, notes, is_faang, is_internship,
                             created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                        """, arguments: [
+                            sourceId,
+                            job.company,
+                            job.role,
+                            job.location,
+                            job.country,
+                            job.category,
+                            job.companyLink,
+                            job.simplifyLink,
+                            uniqueLink,
+                            job.datePosted,
+                            job.notes,
+                            job.isFAANG ? 1 : 0,
+                            job.isInternship ? 1 : 0
+                        ])
+                    savedCount += 1
+                } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
+                    // Duplicate based on unique_link, update the record
+                    try db.execute(sql: """
+                        UPDATE job_postings SET
+                            source_id = ?,
+                            company = ?,
+                            role = ?,
+                            location = ?,
+                            country = ?,
+                            category = ?,
+                            company_link = ?,
+                            simplify_link = COALESCE(?, simplify_link),
+                            date_posted = COALESCE(?, date_posted),
+                            notes = COALESCE(?, notes),
+                            is_faang = ?,
+                            is_internship = ?,
+                            updated_at = datetime('now')
+                        WHERE unique_link = ?
                         """, arguments: [
                             sourceId,
                             job.company,
@@ -113,33 +154,9 @@ actor JobRepository {
                             job.simplifyLink,
                             job.datePosted,
                             job.notes,
-                            job.isFAANG ? 1 : 0
-                        ])
-                    savedCount += 1
-                } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
-                    // Duplicate, update instead
-                    try db.execute(sql: """
-                        UPDATE job_postings SET
-                            category = ?,
-                            simplify_link = COALESCE(?, simplify_link),
-                            date_posted = COALESCE(?, date_posted),
-                            notes = COALESCE(?, notes),
-                            is_faang = ?,
-                            updated_at = datetime('now')
-                        WHERE source_id = ? AND company = ? AND role = ? AND location = ?
-                            AND (company_link = ? OR (company_link IS NULL AND ? IS NULL))
-                        """, arguments: [
-                            job.category,
-                            job.simplifyLink,
-                            job.datePosted,
-                            job.notes,
                             job.isFAANG ? 1 : 0,
-                            sourceId,
-                            job.company,
-                            job.role,
-                            job.location,
-                            job.companyLink,
-                            job.companyLink
+                            job.isInternship ? 1 : 0,
+                            uniqueLink
                         ])
                 }
             }
@@ -165,24 +182,7 @@ actor JobRepository {
             }
 
             let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
-            return rows.map { row in
-                PersistedJobPosting(
-                    id: row["id"],
-                    sourceId: row["source_id"],
-                    company: row["company"],
-                    role: row["role"],
-                    location: row["location"],
-                    country: row["country"],
-                    category: row["category"],
-                    companyLink: row["company_link"],
-                    simplifyLink: row["simplify_link"],
-                    datePosted: row["date_posted"],
-                    notes: row["notes"],
-                    isFAANG: row["is_faang"] == 1,
-                    createdAt: row["created_at"],
-                    updatedAt: row["updated_at"]
-                )
-            }
+            return rows.map { Self.jobPosting(from: $0) }
         }
     }
 
@@ -194,24 +194,7 @@ actor JobRepository {
             let rows = try Row.fetchAll(db, sql: """
                 SELECT * FROM job_postings WHERE country = ? ORDER BY created_at DESC
                 """, arguments: [country])
-            return rows.map { row in
-                PersistedJobPosting(
-                    id: row["id"],
-                    sourceId: row["source_id"],
-                    company: row["company"],
-                    role: row["role"],
-                    location: row["location"],
-                    country: row["country"],
-                    category: row["category"],
-                    companyLink: row["company_link"],
-                    simplifyLink: row["simplify_link"],
-                    datePosted: row["date_posted"],
-                    notes: row["notes"],
-                    isFAANG: row["is_faang"] == 1,
-                    createdAt: row["created_at"],
-                    updatedAt: row["updated_at"]
-                )
-            }
+            return rows.map { Self.jobPosting(from: $0) }
         }
     }
 
@@ -223,24 +206,7 @@ actor JobRepository {
             let rows = try Row.fetchAll(db, sql: """
                 SELECT * FROM job_postings WHERE category = ? ORDER BY created_at DESC
                 """, arguments: [category])
-            return rows.map { row in
-                PersistedJobPosting(
-                    id: row["id"],
-                    sourceId: row["source_id"],
-                    company: row["company"],
-                    role: row["role"],
-                    location: row["location"],
-                    country: row["country"],
-                    category: row["category"],
-                    companyLink: row["company_link"],
-                    simplifyLink: row["simplify_link"],
-                    datePosted: row["date_posted"],
-                    notes: row["notes"],
-                    isFAANG: row["is_faang"] == 1,
-                    createdAt: row["created_at"],
-                    updatedAt: row["updated_at"]
-                )
-            }
+            return rows.map { Self.jobPosting(from: $0) }
         }
     }
 
@@ -256,24 +222,7 @@ actor JobRepository {
                    OR role LIKE ? COLLATE NOCASE
                 ORDER BY created_at DESC
                 """, arguments: [searchPattern, searchPattern])
-            return rows.map { row in
-                PersistedJobPosting(
-                    id: row["id"],
-                    sourceId: row["source_id"],
-                    company: row["company"],
-                    role: row["role"],
-                    location: row["location"],
-                    country: row["country"],
-                    category: row["category"],
-                    companyLink: row["company_link"],
-                    simplifyLink: row["simplify_link"],
-                    datePosted: row["date_posted"],
-                    notes: row["notes"],
-                    isFAANG: row["is_faang"] == 1,
-                    createdAt: row["created_at"],
-                    updatedAt: row["updated_at"]
-                )
-            }
+            return rows.map { Self.jobPosting(from: $0) }
         }
     }
 
@@ -365,24 +314,7 @@ actor JobRepository {
                 WHERE ujs.status = ?
                 ORDER BY jp.created_at DESC
                 """, arguments: [status.rawValue])
-            return rows.map { row in
-                PersistedJobPosting(
-                    id: row["id"],
-                    sourceId: row["source_id"],
-                    company: row["company"],
-                    role: row["role"],
-                    location: row["location"],
-                    country: row["country"],
-                    category: row["category"],
-                    companyLink: row["company_link"],
-                    simplifyLink: row["simplify_link"],
-                    datePosted: row["date_posted"],
-                    notes: row["notes"],
-                    isFAANG: row["is_faang"] == 1,
-                    createdAt: row["created_at"],
-                    updatedAt: row["updated_at"]
-                )
-            }
+            return rows.map { Self.jobPosting(from: $0) }
         }
     }
 
@@ -414,5 +346,29 @@ actor JobRepository {
             try db.execute(sql: "DELETE FROM job_postings")
             try db.execute(sql: "DELETE FROM job_sources")
         }
+    }
+
+    // MARK: - Helpers
+
+    /// Create a PersistedJobPosting from a database row
+    private static func jobPosting(from row: Row) -> PersistedJobPosting {
+        PersistedJobPosting(
+            id: row["id"],
+            sourceId: row["source_id"],
+            company: row["company"],
+            role: row["role"],
+            location: row["location"],
+            country: row["country"],
+            category: row["category"],
+            companyLink: row["company_link"],
+            simplifyLink: row["simplify_link"],
+            uniqueLink: row["unique_link"],
+            datePosted: row["date_posted"],
+            notes: row["notes"],
+            isFAANG: row["is_faang"] == 1,
+            isInternship: row["is_internship"] == 1,
+            createdAt: row["created_at"],
+            updatedAt: row["updated_at"]
+        )
     }
 }

@@ -24,6 +24,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let datePosted: String?
     let notes: String?  // Sponsorship info, requirements, etc.
     let isFAANG: Bool   // True if company is a FAANG-like company (marked with fire emoji)
+    let isInternship: Bool  // True if role contains "intern"
 
     init(
         company: String,
@@ -35,10 +36,12 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         simplifyLink: String? = nil,
         datePosted: String? = nil,
         notes: String? = nil,
-        isFAANG: Bool = false
+        isFAANG: Bool = false,
+        isInternship: Bool? = nil
     ) {
         self.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.role = role.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.role = cleanedRole
         let cleanedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
         self.location = cleanedLocation
         self.country = country ?? Self.extractCountry(from: cleanedLocation)
@@ -48,6 +51,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.datePosted = datePosted?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.isFAANG = isFAANG
+        self.isInternship = isInternship ?? cleanedRole.localizedCaseInsensitiveContains("intern")
     }
 
     /// Extracts country from location string, defaults to "USA"

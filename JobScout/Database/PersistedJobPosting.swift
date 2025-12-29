@@ -10,7 +10,7 @@ import StructuredQueries
 
 /// Persisted job posting in the database
 @Table("job_postings")
-struct PersistedJobPosting: Identifiable, Sendable {
+nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     let id: Int
     @Column("source_id")
     var sourceId: Int
@@ -23,19 +23,27 @@ struct PersistedJobPosting: Identifiable, Sendable {
     var companyLink: String?
     @Column("simplify_link")
     var simplifyLink: String?
+    @Column("unique_link")
+    var uniqueLink: String
     @Column("date_posted")
     var datePosted: String?
     var notes: String?
     @Column("is_faang")
     var isFAANG: Bool
+    @Column("is_internship")
+    var isInternship: Bool
     @Column("created_at")
     let createdAt: Date
     @Column("updated_at")
     var updatedAt: Date
 
     /// Convert from in-memory JobPosting
-    static func from(_ job: JobPosting, sourceId: Int) -> Draft {
-        Draft(
+    static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
+        // unique_link is required - prefer company link, fall back to aggregator link
+        guard let uniqueLink = job.companyLink ?? job.simplifyLink else {
+            return nil
+        }
+        return Draft(
             sourceId: sourceId,
             company: job.company,
             role: job.role,
@@ -44,9 +52,11 @@ struct PersistedJobPosting: Identifiable, Sendable {
             category: job.category,
             companyLink: job.companyLink,
             simplifyLink: job.simplifyLink,
+            uniqueLink: uniqueLink,
             datePosted: job.datePosted,
             notes: job.notes,
             isFAANG: job.isFAANG,
+            isInternship: job.isInternship,
             createdAt: Date(),
             updatedAt: Date()
         )
@@ -64,7 +74,8 @@ struct PersistedJobPosting: Identifiable, Sendable {
             simplifyLink: simplifyLink,
             datePosted: datePosted,
             notes: notes,
-            isFAANG: isFAANG
+            isFAANG: isFAANG,
+            isInternship: isInternship
         )
     }
 }

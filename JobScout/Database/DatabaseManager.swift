@@ -79,6 +79,7 @@ actor DatabaseManager {
                 """)
 
             // Create job_postings table
+            // unique_link is the canonical identifier: company_link if present, else simplify_link
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS "job_postings" (
                     "id" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,12 +91,13 @@ actor DatabaseManager {
                     "category" TEXT NOT NULL DEFAULT 'Other',
                     "company_link" TEXT,
                     "simplify_link" TEXT,
+                    "unique_link" TEXT NOT NULL,
                     "date_posted" TEXT,
                     "notes" TEXT,
                     "is_faang" INTEGER NOT NULL DEFAULT 0,
                     "created_at" TEXT NOT NULL DEFAULT (datetime('now')),
                     "updated_at" TEXT NOT NULL DEFAULT (datetime('now')),
-                    UNIQUE("source_id", "company", "role", "location", "company_link")
+                    UNIQUE("unique_link")
                 )
                 """)
 
@@ -125,6 +127,56 @@ actor DatabaseManager {
                     "updated_at" TEXT NOT NULL DEFAULT (datetime('now'))
                 )
                 """)
+        }
+
+        // Migration 2: Add unique_link column for URL-based deduplication
+        migrator.registerMigration("002_AddUniqueLink") { db in
+            // Check if column already exists (for fresh installs with updated 001 migration)
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let hasUniqueLink = columns.contains { $0["name"] as String == "unique_link" }
+
+            if !hasUniqueLink {
+                // Add the column
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "unique_link" TEXT
+                    """)
+
+                // Populate unique_link from existing data (company_link or simplify_link)
+                try db.execute(sql: """
+                    UPDATE job_postings SET unique_link = COALESCE(company_link, simplify_link)
+                    """)
+
+                // Delete rows without any link (can't be uniquely identified)
+                try db.execute(sql: """
+                    DELETE FROM job_postings WHERE unique_link IS NULL
+                    """)
+            }
+
+            // Drop old unique constraint and create new one
+            // SQLite doesn't support DROP CONSTRAINT, so we need to recreate the table
+            // For simplicity, we'll just create the index if it doesn't exist
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX IF NOT EXISTS "idx_job_postings_unique_link" ON "job_postings"("unique_link")
+                """)
+        }
+
+        // Migration 3: Add is_internship column
+        migrator.registerMigration("003_AddIsInternship") { db in
+            // Check if column already exists
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let hasIsInternship = columns.contains { $0["name"] as String == "is_internship" }
+
+            if !hasIsInternship {
+                // Add the column with default value
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "is_internship" INTEGER NOT NULL DEFAULT 0
+                    """)
+
+                // Populate based on role containing "intern"
+                try db.execute(sql: """
+                    UPDATE job_postings SET is_internship = 1 WHERE LOWER(role) LIKE '%intern%'
+                    """)
+            }
         }
 
         // Run all migrations
