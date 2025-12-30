@@ -17,6 +17,7 @@ enum JobTypeFilter: String, CaseIterable {
 
 struct ContentView: View {
     @State private var urlText = "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
+    @State private var urlSources: [JobSource] = []
     @State private var jobs: [JobPosting] = []
     @State private var isLoading = false
     @State private var isSaving = false
@@ -28,9 +29,14 @@ struct ContentView: View {
     @State private var savedJobCount: Int = 0
     @State private var lastSaveInfo: String?
     @State private var showingClearConfirmation = false
+    @State private var harmonizationInfo: String?
+    @State private var isHarmonizing = false
 
     private let parser = DeterministicTableParser()
     private let repository = JobRepository()
+    private let harmonizer = DataHarmonizer()
+    private let linkClassifier = LinkClassifier()
+    private let urlHistoryService = URLHistoryService.shared
 
     /// All unique categories from loaded jobs
     var availableCategories: [String] {
@@ -68,6 +74,19 @@ struct ContentView: View {
             }
         }
 
+        // Sort by posted date descending (most recent first)
+        // Jobs without dates go to the end
+        result.sort { job1, job2 in
+            let date1 = job1.datePosted ?? ""
+            let date2 = job2.datePosted ?? ""
+            // Empty dates sort to the end
+            if date1.isEmpty && date2.isEmpty { return false }
+            if date1.isEmpty { return false }
+            if date2.isEmpty { return true }
+            // ISO dates (YYYY-MM-DD) sort correctly as strings
+            return date1 > date2
+        }
+
         return result
     }
 
@@ -75,9 +94,17 @@ struct ContentView: View {
         VStack(spacing: 12) {
             // URL Input
             HStack {
-                TextField("GitHub README URL", text: $urlText)
-                    .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
+                URLComboBox(
+                    text: $urlText,
+                    placeholder: "GitHub README URL",
+                    sources: urlSources,
+                    onDelete: { url in
+                        Task {
+                            await urlHistoryService.removeURL(url)
+                            await loadURLSources()
+                        }
+                    }
+                )
 
                 Button {
                     fetchAndParse()
@@ -115,10 +142,26 @@ struct ContentView: View {
             }
 
             // Analysis Info
-            if !analysisInfo.isEmpty {
-                Text(analysisInfo)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if !analysisInfo.isEmpty || isHarmonizing {
+                HStack {
+                    if !analysisInfo.isEmpty {
+                        Text(analysisInfo)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if isHarmonizing {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Harmonizing...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if let harmInfo = harmonizationInfo {
+                        Text(harmInfo)
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                }
             }
 
             // Save Info
@@ -261,6 +304,9 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             loadSavedJobs()
+            Task {
+                await loadURLSources()
+            }
         }
         .toolbar {
             ToolbarItem(placement: .destructiveAction) {
@@ -298,6 +344,7 @@ struct ContentView: View {
         isLoading = true
         errorMessage = nil
         analysisInfo = ""
+        harmonizationInfo = nil
 
         Task {
             do {
@@ -309,63 +356,103 @@ struct ContentView: View {
                 let tables = parser.parseTables(content)
                 let parsedJobs = parser.extractJobs(from: tables)
 
+                // Extract page title from content
+                let pageTitle = extractPageTitle(from: content)
+
                 let info = "Format: \(format.rawValue) | Tables: \(tables.count) | Total rows: \(tables.reduce(0) { $0 + $1.rowCount })"
 
-                // Update UI state (already on MainActor since Task inherits context)
-                jobs = parsedJobs
-                selectedCategories.removeAll()
-                jobTypeFilter = .all
+                // Update parsing info
                 analysisInfo = info
                 isLoading = false
 
                 if parsedJobs.isEmpty && !tables.isEmpty {
                     errorMessage = "Found tables but couldn't extract job postings. Headers may not match expected format."
+                    jobs = []
+                    return
                 }
+
+                // Harmonize the jobs
+                isHarmonizing = true
+
+                let result = await harmonizer.harmonize(
+                    jobs: parsedJobs,
+                    pageTitle: pageTitle,
+                    pageURL: urlText
+                )
+
+                // Update UI with harmonized jobs
+                jobs = result.jobs
+                selectedCategories.removeAll()
+                jobTypeFilter = .all
+                isHarmonizing = false
+
+                // Show harmonization info
+                if result.errors.isEmpty {
+                    harmonizationInfo = "Category: \(result.inferredCategory)"
+                } else {
+                    harmonizationInfo = "Category: \(result.inferredCategory) (with warnings)"
+                    errorMessage = result.errors.joined(separator: "\n")
+                }
+
+                // Save URL to history after successful fetch
+                await saveURLToHistory()
             } catch {
                 errorMessage = "Error: \(error.localizedDescription)"
                 isLoading = false
+                isHarmonizing = false
             }
         }
     }
 
-    /// Extract aggregator name from URL
-    private func aggregatorName(from urlString: String) -> String {
-        let lowercased = urlString.lowercased()
-
-        if lowercased.contains("simplify.jobs") || lowercased.contains("simplify.co") {
-            return "Simplify"
-        } else if lowercased.contains("linkedin.com") {
-            return "LinkedIn"
-        } else if lowercased.contains("indeed.com") {
-            return "Indeed"
-        } else if lowercased.contains("glassdoor.com") {
-            return "Glassdoor"
-        } else if lowercased.contains("lever.co") {
-            return "Lever"
-        } else if lowercased.contains("greenhouse.io") {
-            return "Greenhouse"
-        } else if lowercased.contains("workday.com") {
-            return "Workday"
-        } else if lowercased.contains("ziprecruiter.com") {
-            return "ZipRecruiter"
-        } else if lowercased.contains("monster.com") {
-            return "Monster"
-        } else if lowercased.contains("dice.com") {
-            return "Dice"
-        } else if lowercased.contains("wellfound.com") || lowercased.contains("angel.co") {
-            return "Wellfound"
-        } else if lowercased.contains("builtin.com") {
-            return "BuiltIn"
-        } else {
-            // Try to extract domain name
-            if let url = URL(string: urlString), let host = url.host {
-                let parts = host.split(separator: ".")
-                if parts.count >= 2 {
-                    return String(parts[parts.count - 2]).capitalized
+    /// Extract page title from markdown/HTML content
+    private func extractPageTitle(from content: String) -> String {
+        // Try markdown heading first (# Title)
+        // Look for first line that starts with # and space
+        let lines = content.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("# ") {
+                let title = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                if !title.isEmpty {
+                    return title
                 }
             }
-            return "Apply"
         }
+
+        // Try HTML title tag
+        if let startRange = content.range(of: "<title>", options: .caseInsensitive),
+           let endRange = content.range(of: "</title>", options: .caseInsensitive),
+           startRange.upperBound < endRange.lowerBound {
+            let title = String(content[startRange.upperBound..<endRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty {
+                return title
+            }
+        }
+
+        // Fall back to URL-based title
+        if let url = URL(string: urlText) {
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if pathComponents.count >= 2 {
+                return pathComponents[pathComponents.count - 2] + "/" + pathComponents[pathComponents.count - 1]
+            }
+        }
+
+        return "Job Listings"
+    }
+
+    /// Extract aggregator name from URL using LinkClassifier
+    private func aggregatorName(from urlString: String) -> String {
+        if let name = linkClassifier.aggregatorName(from: urlString) {
+            return name
+        }
+
+        // Fall back to domain name extraction
+        if let name = linkClassifier.extractDomainName(from: urlString) {
+            return name
+        }
+
+        return "Apply"
     }
 
     /// Converts a GitHub blob URL to raw.githubusercontent.com URL
@@ -487,6 +574,18 @@ struct ContentView: View {
                 isLoading = false
             }
         }
+    }
+
+    /// Load URL sources from database
+    @MainActor
+    private func loadURLSources() async {
+        urlSources = await urlHistoryService.getSources()
+    }
+
+    /// Save current URL to history (creates or updates source in database)
+    private func saveURLToHistory() async {
+        await urlHistoryService.addURL(urlText)
+        await loadURLSources()
     }
 }
 

@@ -66,7 +66,7 @@ actor JobRepository {
         }
     }
 
-    /// Get all sources
+    /// Get all sources ordered by name
     func getAllSources() async throws -> [JobSource] {
         let db = try await dbManager.getDatabase()
 
@@ -82,6 +82,101 @@ actor JobRepository {
                 )
             }
         }
+    }
+
+    /// Get all sources ordered by most recently used (for URL history dropdown)
+    func getSourcesByRecentUsage(limit: Int = 20) async throws -> [JobSource] {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM job_sources
+                ORDER BY COALESCE(last_fetched_at, created_at) DESC
+                LIMIT ?
+                """, arguments: [limit])
+            return rows.map { row in
+                JobSource(
+                    id: row["id"],
+                    url: row["url"],
+                    name: row["name"],
+                    lastFetchedAt: row["last_fetched_at"],
+                    createdAt: row["created_at"]
+                )
+            }
+        }
+    }
+
+    /// Add or update a source URL (touch its last_fetched_at timestamp)
+    func touchSource(url: String, name: String? = nil) async throws -> JobSource {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.write { db in
+            // Check if source exists
+            if let existing = try Row.fetchOne(db, sql: """
+                SELECT * FROM job_sources WHERE url = ?
+                """, arguments: [url]) {
+                // Update last_fetched_at
+                try db.execute(sql: """
+                    UPDATE job_sources SET last_fetched_at = datetime('now') WHERE id = ?
+                    """, arguments: [existing["id"] as Int])
+
+                return JobSource(
+                    id: existing["id"],
+                    url: existing["url"],
+                    name: existing["name"],
+                    lastFetchedAt: Date(),
+                    createdAt: existing["created_at"]
+                )
+            }
+
+            // Create new source with name derived from URL if not provided
+            let sourceName = name ?? Self.extractSourceName(from: url)
+            try db.execute(sql: """
+                INSERT INTO job_sources (url, name, last_fetched_at, created_at)
+                VALUES (?, ?, datetime('now'), datetime('now'))
+                """, arguments: [url, sourceName])
+
+            let id = db.lastInsertedRowID
+
+            return JobSource(
+                id: Int(id),
+                url: url,
+                name: sourceName,
+                lastFetchedAt: Date(),
+                createdAt: Date()
+            )
+        }
+    }
+
+    /// Delete a source by URL
+    func deleteSource(url: String) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            // First get the source ID
+            guard let row = try Row.fetchOne(db, sql: "SELECT id FROM job_sources WHERE url = ?", arguments: [url]) else {
+                return // Source doesn't exist, nothing to delete
+            }
+            let sourceId: Int = row["id"]
+
+            // Delete associated jobs first (foreign key constraint)
+            try db.execute(sql: "DELETE FROM job_postings WHERE source_id = ?", arguments: [sourceId])
+
+            // Delete the source
+            try db.execute(sql: "DELETE FROM job_sources WHERE id = ?", arguments: [sourceId])
+        }
+    }
+
+    /// Extract a friendly name from a URL
+    private static func extractSourceName(from url: String) -> String {
+        guard let parsedURL = URL(string: url) else { return url }
+        let components = parsedURL.pathComponents.filter { $0 != "/" }
+        if components.count >= 2 {
+            return "\(components[0])/\(components[1])"
+        } else if let host = parsedURL.host {
+            return host
+        }
+        return url
     }
 
     // MARK: - Job Postings
