@@ -164,10 +164,14 @@ struct LinkClassifier: Sendable {
 
         // If path contains job-specific patterns, it's NOT a homepage
         let jobPatterns = [
-            "/job/", "/jobs/", "/posting/", "/postings/",
-            "/position/", "/positions/", "/career/", "/careers/",
-            "/apply/", "/application/", "/opening/", "/openings/",
-            "/requisition/", "/req/", "/vacancy/", "/vacancies/"
+            "/job/", "/jobs/", "/job-post/", "/job-posting/", "/job-postings/",
+            "/posting/", "/postings/",
+            "/position/", "/positions/",
+            "/career/", "/careers/", "/career-opportunities/",
+            "/apply/", "/application/", "/applications/",
+            "/opening/", "/openings/", "/open-positions/",
+            "/requisition/", "/req/", "/vacancy/", "/vacancies/",
+            "/opportunity/", "/opportunities/"
         ]
 
         for pattern in jobPatterns {
@@ -176,8 +180,20 @@ struct LinkClassifier: Sendable {
             }
         }
 
-        // Job IDs in query parameters
-        let jobQueryParams = ["job", "jobid", "job_id", "posting", "posting_id", "position", "req", "requisition"]
+        // Job IDs in query parameters (common ATS systems)
+        let jobQueryParams = [
+            "job", "jobid", "job_id", "jid",
+            "posting", "posting_id",
+            "position", "position_id",
+            "req", "requisition", "requisition_id",
+            "gh_jid",       // Greenhouse
+            "lever_id",     // Lever
+            "ashby_jid",    // Ashby
+            "jobvite_jid",  // Jobvite
+            "icims_jid",    // iCIMS
+            "opening_id",
+            "vacancy_id"
+        ]
         for param in jobQueryParams {
             if query.contains("\(param)=") {
                 return false

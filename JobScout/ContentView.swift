@@ -76,7 +76,8 @@ struct ContentView: View {
         case .all:
             break
         case .newOnly:
-            result = result.filter { $0.userStatus == .new }
+            // Exclude applied, ignored, and viewed jobs
+            result = result.filter { $0.userStatus == .new && $0.lastViewed == nil }
         case .appliedOnly:
             result = result.filter { $0.userStatus == .applied }
         case .ignoredOnly:
@@ -399,6 +400,8 @@ struct ContentView: View {
         .onAppear {
             loadSavedJobs()
             Task {
+                // Populate default URLs if this is first run
+                await urlHistoryService.populateDefaultsIfNeeded()
                 await loadURLSources()
             }
         }
@@ -448,12 +451,20 @@ struct ContentView: View {
                 // Parse the content (parser is nonisolated, safe to call from any context)
                 let format = parser.detectFormat(content)
                 let tables = parser.parseTables(content)
-                let parsedJobs = parser.extractJobs(from: tables)
+                var parsedJobs = parser.extractJobs(from: tables)
+
+                // Apply max rows limit if configured
+                let maxRows = UserDefaults.standard.integer(forKey: SettingsView.maxRowsKey)
+                if maxRows > 0 && parsedJobs.count > maxRows {
+                    parsedJobs = Array(parsedJobs.prefix(maxRows))
+                }
 
                 // Extract page title from content
                 let pageTitle = extractPageTitle(from: content)
 
-                let info = "Format: \(format.rawValue) | Tables: \(tables.count) | Total rows: \(tables.reduce(0) { $0 + $1.rowCount })"
+                let totalRows = tables.reduce(0) { $0 + $1.rowCount }
+                let limitInfo = maxRows > 0 ? " (limited to \(maxRows))" : ""
+                let info = "Format: \(format.rawValue) | Tables: \(tables.count) | Total rows: \(totalRows)\(limitInfo)"
 
                 // Update parsing info
                 analysisInfo = info
@@ -581,7 +592,7 @@ struct ContentView: View {
                 let source = try await repository.getOrCreateSource(url: urlText, name: sourceName)
 
                 // Save jobs
-                let savedCount = try await repository.saveJobs(jobs, sourceId: source.id)
+                let result = try await repository.saveJobs(jobs, sourceId: source.id)
 
                 // Update last fetched timestamp
                 try await repository.updateLastFetched(sourceId: source.id)
@@ -591,7 +602,19 @@ struct ContentView: View {
 
                 await MainActor.run {
                     savedJobCount = totalCount
-                    lastSaveInfo = "Saved \(savedCount) new jobs (total: \(totalCount))"
+                    // Build save info message
+                    var parts: [String] = []
+                    if result.savedCount > 0 {
+                        parts.append("\(result.savedCount) new")
+                    }
+                    if result.updatedCount > 0 {
+                        parts.append("\(result.updatedCount) updated")
+                    }
+                    if result.skippedCount > 0 {
+                        parts.append("\(result.skippedCount) skipped (no links)")
+                    }
+                    let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+                    lastSaveInfo = "\(summary) | Total: \(totalCount)"
                     isSaving = false
                 }
             } catch {
@@ -663,6 +686,10 @@ struct ContentView: View {
                 jobTypeFilter = .all
                 analysisInfo = "Database cleared"
                 isLoading = false
+
+                // Repopulate default URLs and refresh the dropdown
+                await urlHistoryService.populateDefaultsIfNeeded()
+                await loadURLSources()
             } catch {
                 errorMessage = "Clear error: \(error.localizedDescription)"
                 isLoading = false

@@ -9,6 +9,13 @@ import Foundation
 import GRDB
 import StructuredQueries
 
+/// Result of a save operation
+struct SaveResult: Sendable {
+    let savedCount: Int
+    let skippedCount: Int
+    let updatedCount: Int
+}
+
 /// Repository for managing job postings and related data
 actor JobRepository {
     private let dbManager: DatabaseManager
@@ -183,16 +190,19 @@ actor JobRepository {
 
     /// Save jobs from a fetch operation (upsert)
     /// Jobs are uniquely identified by their URL (company link, or aggregator link as fallback)
-    func saveJobs(_ jobs: [JobPosting], sourceId: Int) async throws -> Int {
+    func saveJobs(_ jobs: [JobPosting], sourceId: Int) async throws -> SaveResult {
         let db = try await dbManager.getDatabase()
 
         return try await db.write { db in
             var savedCount = 0
+            var skippedCount = 0
+            var updatedCount = 0
 
             for job in jobs {
                 // Compute unique_link: prefer company link, fall back to aggregator link
                 guard let uniqueLink = job.companyLink ?? job.aggregatorLink else {
                     // Skip jobs without any link - can't uniquely identify them
+                    skippedCount += 1
                     continue
                 }
 
@@ -259,10 +269,11 @@ actor JobRepository {
                             job.isInternship ? 1 : 0,
                             uniqueLink
                         ])
+                    updatedCount += 1
                 }
             }
 
-            return savedCount
+            return SaveResult(savedCount: savedCount, skippedCount: skippedCount, updatedCount: updatedCount)
         }
     }
 
