@@ -454,14 +454,17 @@ struct ContentView: View {
         .padding()
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
+            // Load saved jobs immediately for fast UI rendering
+            loadSavedJobs()
+
             Task {
                 // Populate default URLs if this is first run
                 await urlHistoryService.populateDefaultsIfNeeded()
                 await loadURLSources()
 
-                // Auto-fetch from all sources on app start
+                // Auto-fetch from all sources in the background
                 await MainActor.run {
-                    fetchAllSources()
+                    fetchAllSourcesInBackground()
                 }
             }
         }
@@ -576,7 +579,7 @@ struct ContentView: View {
         }
     }
 
-    /// Fetch from all saved sources
+    /// Fetch from all saved sources (blocks UI with loading indicator)
     private func fetchAllSources() {
         guard !urlSources.isEmpty else {
             // No sources - just load saved jobs
@@ -590,50 +593,69 @@ struct ContentView: View {
         lastSaveInfo = nil
 
         Task {
-            var totalNew = 0
-            var totalUpdated = 0
-            var totalSkipped = 0
-            var errors: [String] = []
-
-            for source in urlSources {
-                do {
-                    let result = try await fetchAndSaveFromSource(source.url)
-                    totalNew += result.savedCount
-                    totalUpdated += result.updatedCount
-                    totalSkipped += result.skippedCount
-                } catch {
-                    errors.append("\(source.name): \(error.localizedDescription)")
-                }
-            }
-
-            // Get total count
-            let totalCount = (try? await repository.getJobCount()) ?? 0
-
+            await performFetchFromAllSources()
             await MainActor.run {
-                savedJobCount = totalCount
-
-                // Build summary
-                var parts: [String] = []
-                if totalNew > 0 { parts.append("\(totalNew) new") }
-                if totalUpdated > 0 { parts.append("\(totalUpdated) updated") }
-                if totalSkipped > 0 { parts.append("\(totalSkipped) skipped") }
-                let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
-                lastSaveInfo = "\(summary) | Total: \(totalCount)"
-
-                if !errors.isEmpty {
-                    errorMessage = errors.joined(separator: "\n")
-                }
-
-                analysisInfo = "Fetched from \(urlSources.count) sources"
                 isLoading = false
             }
-
-            // Queue jobs for analysis
-            await analysisService.queueAllUnanalyzed()
-
-            // Reload jobs from database
-            await reloadJobsFromDatabase()
         }
+    }
+
+    /// Fetch from all saved sources in background (doesn't block UI)
+    private func fetchAllSourcesInBackground() {
+        guard !urlSources.isEmpty else { return }
+
+        // Show subtle indicator without blocking
+        analysisInfo = "Refreshing from \(urlSources.count) sources..."
+
+        Task {
+            await performFetchFromAllSources()
+        }
+    }
+
+    /// Shared implementation for fetching from all sources
+    private func performFetchFromAllSources() async {
+        var totalNew = 0
+        var totalUpdated = 0
+        var totalSkipped = 0
+        var errors: [String] = []
+
+        for source in urlSources {
+            do {
+                let result = try await fetchAndSaveFromSource(source.url)
+                totalNew += result.savedCount
+                totalUpdated += result.updatedCount
+                totalSkipped += result.skippedCount
+            } catch {
+                errors.append("\(source.name): \(error.localizedDescription)")
+            }
+        }
+
+        // Get total count
+        let totalCount = (try? await repository.getJobCount()) ?? 0
+
+        await MainActor.run {
+            savedJobCount = totalCount
+
+            // Build summary
+            var parts: [String] = []
+            if totalNew > 0 { parts.append("\(totalNew) new") }
+            if totalUpdated > 0 { parts.append("\(totalUpdated) updated") }
+            if totalSkipped > 0 { parts.append("\(totalSkipped) skipped") }
+            let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+            lastSaveInfo = "\(summary) | Total: \(totalCount)"
+
+            if !errors.isEmpty {
+                errorMessage = errors.joined(separator: "\n")
+            }
+
+            analysisInfo = "Fetched from \(urlSources.count) sources"
+        }
+
+        // Queue jobs for analysis
+        await analysisService.queueAllUnanalyzed()
+
+        // Reload jobs from database
+        await reloadJobsFromDatabase()
     }
 
     /// Fetch and save from a single source URL (used by fetchAllSources)
