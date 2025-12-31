@@ -5,6 +5,7 @@
 //  Created by Ilia Sazonov on 12/26/25.
 //
 
+import AppKit
 import SwiftUI
 
 /// Filter for job type (intern/FAANG/all)
@@ -272,14 +273,26 @@ struct ContentView: View {
                     TableColumn("Category", value: \.category)
                         .width(min: 80, ideal: 120)
                     TableColumn("Posted") { job in
-                        Text(job.datePosted ?? "-")
+                        if let date = job.parsedDate {
+                            Text(formatRelativeDate(date))
+                                .foregroundStyle(postedDateColor(date))
+                        } else if let dateStr = job.datePosted, !dateStr.isEmpty {
+                            Text(dateStr)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("-")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .width(min: 50, ideal: 80)
                     TableColumn("Company Site") { job in
                         if let link = job.companyLink, !link.isEmpty,
                            let url = URL(string: link) {
-                            Link("Apply", destination: url)
-                                .foregroundStyle(.blue)
+                            Button("Apply") {
+                                openURLAndTrack(url: url, job: job)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
                         } else {
                             Text("-")
                                 .foregroundStyle(.secondary)
@@ -289,14 +302,28 @@ struct ContentView: View {
                     TableColumn("Aggregator") { job in
                         if let link = job.aggregatorLink, !link.isEmpty,
                            let url = URL(string: link) {
-                            Link(job.aggregatorName ?? aggregatorName(from: link), destination: url)
-                                .foregroundStyle(.green)
+                            Button(job.aggregatorName ?? aggregatorName(from: link)) {
+                                openURLAndTrack(url: url, job: job)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.green)
                         } else {
                             Text("-")
                                 .foregroundStyle(.secondary)
                         }
                     }
                     .width(min: 70, ideal: 90)
+                    TableColumn("Last Viewed") { job in
+                        if let lastViewed = job.lastViewed {
+                            Text(formatLastViewed(lastViewed))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("-")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .width(min: 80, ideal: 100)
                 }
             }
         }
@@ -586,6 +613,112 @@ struct ContentView: View {
     private func saveURLToHistory() async {
         await urlHistoryService.addURL(urlText)
         await loadURLSources()
+    }
+
+    /// Open URL in browser and track the click in database
+    private func openURLAndTrack(url: URL, job: JobPosting) {
+        // Open the URL
+        NSWorkspace.shared.open(url)
+
+        // Track the click if job is persisted
+        if let jobId = job.persistedId {
+            Task {
+                do {
+                    try await repository.recordApplyClick(jobId: jobId)
+                    // Update the local job's lastViewed
+                    if let index = jobs.firstIndex(where: { $0.persistedId == jobId }) {
+                        jobs[index] = JobPosting(
+                            persistedId: jobs[index].persistedId,
+                            company: jobs[index].company,
+                            role: jobs[index].role,
+                            location: jobs[index].location,
+                            country: jobs[index].country,
+                            category: jobs[index].category,
+                            companyLink: jobs[index].companyLink,
+                            aggregatorLink: jobs[index].aggregatorLink,
+                            aggregatorName: jobs[index].aggregatorName,
+                            datePosted: jobs[index].datePosted,
+                            notes: jobs[index].notes,
+                            isFAANG: jobs[index].isFAANG,
+                            isInternship: jobs[index].isInternship,
+                            lastViewed: Date()
+                        )
+                    }
+                } catch {
+                    // Silently ignore tracking errors - don't interrupt user flow
+                }
+            }
+        }
+    }
+
+    /// Format posted date for display (relative to now)
+    private func formatRelativeDate(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        // Future dates (shouldn't happen, but handle gracefully)
+        if interval < 0 {
+            return "Upcoming"
+        }
+
+        if interval < 86400 {
+            return "Today"
+        } else if interval < 172800 {
+            return "Yesterday"
+        } else if interval < 604800 {
+            let days = Int(interval / 86400)
+            return "\(days)d ago"
+        } else if interval < 2592000 {
+            let weeks = Int(interval / 604800)
+            return "\(weeks)w ago"
+        } else if interval < 31536000 {
+            let months = Int(interval / 2592000)
+            return "\(months)mo ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM yyyy"
+            return formatter.string(from: date)
+        }
+    }
+
+    /// Color for posted date based on recency
+    private func postedDateColor(_ date: Date) -> Color {
+        let interval = Date().timeIntervalSince(date)
+
+        if interval < 86400 {
+            return .green  // Today
+        } else if interval < 259200 {
+            return .blue   // 1-3 days
+        } else if interval < 604800 {
+            return .primary  // 3-7 days
+        } else if interval < 1209600 {
+            return .secondary  // 1-2 weeks
+        } else {
+            return .secondary.opacity(0.7)  // Older
+        }
+    }
+
+    /// Format last viewed date for display
+    private func formatLastViewed(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        if interval < 60 {
+            return "Just now"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)m ago"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)h ago"
+        } else if interval < 604800 {
+            let days = Int(interval / 86400)
+            return "\(days)d ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: date)
+        }
     }
 }
 

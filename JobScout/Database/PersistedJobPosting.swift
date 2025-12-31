@@ -38,6 +38,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     let createdAt: Date
     @Column("updated_at")
     var updatedAt: Date
+    @Column("last_viewed")
+    var lastViewed: Date?
 
     /// Convert from in-memory JobPosting
     static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
@@ -68,6 +70,7 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     /// Convert to in-memory JobPosting
     func toJobPosting() -> JobPosting {
         JobPosting(
+            persistedId: id,
             company: company,
             role: role,
             location: location,
@@ -79,7 +82,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             datePosted: datePosted,
             notes: notes,
             isFAANG: isFAANG,
-            isInternship: isInternship
+            isInternship: isInternship,
+            lastViewed: lastViewed
         )
     }
 }

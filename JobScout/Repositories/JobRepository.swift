@@ -467,7 +467,21 @@ actor JobRepository {
             isFAANG: row["is_faang"] == 1,
             isInternship: row["is_internship"] == 1,
             createdAt: row["created_at"],
-            updatedAt: row["updated_at"]
+            updatedAt: row["updated_at"],
+            lastViewed: row["last_viewed"]
         )
+    }
+
+    // MARK: - Apply Tracking
+
+    /// Update last_viewed timestamp when Apply button is clicked
+    func recordApplyClick(jobId: Int) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            try db.execute(sql: """
+                UPDATE job_postings SET last_viewed = datetime('now') WHERE id = ?
+                """, arguments: [jobId])
+        }
     }
 }

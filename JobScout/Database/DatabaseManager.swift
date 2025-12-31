@@ -231,6 +231,18 @@ actor DatabaseManager {
             // SQLite doesn't support DROP COLUMN easily
         }
 
+        // Migration 5: Add last_viewed column for tracking apply button clicks
+        migrator.registerMigration("005_AddLastViewed") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            if !columnNames.contains("last_viewed") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "last_viewed" TEXT
+                    """)
+            }
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

@@ -9,6 +9,9 @@ import Foundation
 
 /// Represents a single job posting extracted from a table
 nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
+    /// Database ID (nil for parsed jobs not yet saved)
+    let persistedId: Int?
+
     /// Unique identifier combining all fields to ensure uniqueness
     var id: String {
         "\(company)-\(role)-\(location)-\(companyLink ?? aggregatorLink ?? "")-\(datePosted ?? "")"
@@ -26,8 +29,10 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let notes: String?  // Sponsorship info, requirements, etc.
     let isFAANG: Bool   // True if company is a FAANG-like company (marked with fire emoji)
     let isInternship: Bool  // True if role contains "intern"
+    let lastViewed: Date?  // Timestamp when Apply button was last clicked
 
     init(
+        persistedId: Int? = nil,
         company: String,
         role: String,
         location: String,
@@ -39,8 +44,10 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         datePosted: String? = nil,
         notes: String? = nil,
         isFAANG: Bool = false,
-        isInternship: Bool? = nil
+        isInternship: Bool? = nil,
+        lastViewed: Date? = nil
     ) {
+        self.persistedId = persistedId
         self.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
         self.role = cleanedRole
@@ -55,6 +62,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.isFAANG = isFAANG
         self.isInternship = isInternship ?? cleanedRole.localizedCaseInsensitiveContains("intern")
+        self.lastViewed = lastViewed
     }
 
     /// Extracts country from location string, defaults to "USA"
