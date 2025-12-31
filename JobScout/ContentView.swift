@@ -16,6 +16,17 @@ enum JobTypeFilter: String, CaseIterable {
     case faangOnly = "FAANG"
 }
 
+/// Filter for job status
+enum StatusFilter: String, CaseIterable {
+    case all = "All"
+    case newOnly = "New Only"
+    case appliedOnly = "Applied"
+    case ignoredOnly = "Ignored"
+    case excludeActioned = "Exclude Applied/Ignored"
+
+    var displayName: String { rawValue }
+}
+
 struct ContentView: View {
     @State private var urlText = "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
     @State private var urlSources: [JobSource] = []
@@ -27,6 +38,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var selectedCategories: Set<String> = []
     @State private var jobTypeFilter: JobTypeFilter = .all
+    @State private var statusFilter: StatusFilter = .all
     @State private var savedJobCount: Int = 0
     @State private var lastSaveInfo: String?
     @State private var showingClearConfirmation = false
@@ -57,6 +69,20 @@ struct ContentView: View {
             result = result.filter { !$0.isInternship }
         case .faangOnly:
             result = result.filter { $0.isFAANG }
+        }
+
+        // Filter by status
+        switch statusFilter {
+        case .all:
+            break
+        case .newOnly:
+            result = result.filter { $0.userStatus == .new }
+        case .appliedOnly:
+            result = result.filter { $0.userStatus == .applied }
+        case .ignoredOnly:
+            result = result.filter { $0.userStatus == .ignored }
+        case .excludeActioned:
+            result = result.filter { $0.userStatus == .new }
         }
 
         // Filter by selected categories (if any selected)
@@ -199,13 +225,23 @@ struct ContentView: View {
                 .cornerRadius(8)
 
                 // Job type filter (intern/FAANG/all)
-                Picker("Job Type", selection: $jobTypeFilter) {
-                    ForEach(JobTypeFilter.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
+                HStack {
+                    Picker("Job Type", selection: $jobTypeFilter) {
+                        ForEach(JobTypeFilter.allCases, id: \.self) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 350)
+
+                    Picker("Status", selection: $statusFilter) {
+                        ForEach(StatusFilter.allCases, id: \.self) { filter in
+                            Text(filter.displayName).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 200)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 400)
 
                 // Category filters
                 if !availableCategories.isEmpty {
@@ -262,16 +298,41 @@ struct ContentView: View {
                         }
                     }
                     .width(min: 30, ideal: 40)
-                    TableColumn("Company", value: \.company)
-                        .width(min: 100, ideal: 150)
-                    TableColumn("Role", value: \.role)
-                        .width(min: 150, ideal: 250)
-                    TableColumn("Location", value: \.location)
-                        .width(min: 100, ideal: 150)
-                    TableColumn("Country", value: \.country)
-                        .width(min: 60, ideal: 80)
-                    TableColumn("Category", value: \.category)
-                        .width(min: 80, ideal: 120)
+                    TableColumn("Status") { job in
+                        JobStatusCell(
+                            job: job,
+                            formatDate: formatRelativeDate,
+                            onApplied: { setJobStatus(job: job, status: .applied) },
+                            onIgnored: { setJobStatus(job: job, status: .ignored) },
+                            onReset: { setJobStatus(job: job, status: .new) }
+                        )
+                    }
+                    .width(min: 100, ideal: 130)
+                    TableColumn("Company") { job in
+                        Text(job.company)
+                            .foregroundStyle(jobRowColor(job))
+                    }
+                    .width(min: 100, ideal: 150)
+                    TableColumn("Role") { job in
+                        Text(job.role)
+                            .foregroundStyle(jobRowColor(job))
+                    }
+                    .width(min: 150, ideal: 250)
+                    TableColumn("Location") { job in
+                        Text(job.location)
+                            .foregroundStyle(jobRowColor(job))
+                    }
+                    .width(min: 100, ideal: 150)
+                    TableColumn("Country") { job in
+                        Text(job.country)
+                            .foregroundStyle(jobRowColor(job))
+                    }
+                    .width(min: 60, ideal: 80)
+                    TableColumn("Category") { job in
+                        Text(job.category)
+                            .foregroundStyle(jobRowColor(job))
+                    }
+                    .width(min: 80, ideal: 120)
                     TableColumn("Posted") { job in
                         if let date = job.parsedDate {
                             Text(formatRelativeDate(date))
@@ -285,37 +346,34 @@ struct ContentView: View {
                         }
                     }
                     .width(min: 50, ideal: 80)
-                    TableColumn("Company Site") { job in
-                        if let link = job.companyLink, !link.isEmpty,
-                           let url = URL(string: link) {
-                            Button("Apply") {
-                                openURLAndTrack(url: url, job: job)
+                    TableColumn("Apply") { job in
+                        HStack(spacing: 8) {
+                            if let link = job.companyLink, !link.isEmpty,
+                               let url = URL(string: link) {
+                                Button("Company") {
+                                    openURLAndTrack(url: url, job: job)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.blue)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.blue)
-                        } else {
-                            Text("-")
-                                .foregroundStyle(.secondary)
+                            if let link = job.aggregatorLink, !link.isEmpty,
+                               let url = URL(string: link) {
+                                Button(job.aggregatorName ?? aggregatorName(from: link)) {
+                                    openURLAndTrack(url: url, job: job)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.green)
+                            }
+                            if job.companyLink == nil && job.aggregatorLink == nil {
+                                Text("-")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                    .width(min: 80, ideal: 100)
-                    TableColumn("Aggregator") { job in
-                        if let link = job.aggregatorLink, !link.isEmpty,
-                           let url = URL(string: link) {
-                            Button(job.aggregatorName ?? aggregatorName(from: link)) {
-                                openURLAndTrack(url: url, job: job)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.green)
-                        } else {
-                            Text("-")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .width(min: 70, ideal: 90)
+                    .width(min: 100, ideal: 140)
                     TableColumn("Last Viewed") { job in
                         if let lastViewed = job.lastViewed {
-                            Text(formatLastViewed(lastViewed))
+                            Text(formatRelativeDate(lastViewed))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -323,7 +381,7 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .width(min: 80, ideal: 100)
+                    .width(min: 70, ideal: 90)
                 }
             }
         }
@@ -641,7 +699,9 @@ struct ContentView: View {
                             notes: jobs[index].notes,
                             isFAANG: jobs[index].isFAANG,
                             isInternship: jobs[index].isInternship,
-                            lastViewed: Date()
+                            lastViewed: Date(),
+                            userStatus: jobs[index].userStatus,
+                            statusChangedAt: jobs[index].statusChangedAt
                         )
                     }
                 } catch {
@@ -698,28 +758,52 @@ struct ContentView: View {
         }
     }
 
-    /// Format last viewed date for display
-    private func formatLastViewed(_ date: Date) -> String {
-        let now = Date()
-        let interval = now.timeIntervalSince(date)
+    /// Set job status and update local state
+    private func setJobStatus(job: JobPosting, status: JobStatus) {
+        guard let jobId = job.persistedId else { return }
 
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)m ago"
-        } else if interval < 86400 {
-            let hours = Int(interval / 3600)
-            return "\(hours)h ago"
-        } else if interval < 604800 {
-            let days = Int(interval / 86400)
-            return "\(days)d ago"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: date)
+        Task {
+            do {
+                try await repository.setJobStatus(jobId: jobId, status: status)
+                // Update local state
+                if let index = jobs.firstIndex(where: { $0.persistedId == jobId }) {
+                    jobs[index] = JobPosting(
+                        persistedId: jobs[index].persistedId,
+                        company: jobs[index].company,
+                        role: jobs[index].role,
+                        location: jobs[index].location,
+                        country: jobs[index].country,
+                        category: jobs[index].category,
+                        companyLink: jobs[index].companyLink,
+                        aggregatorLink: jobs[index].aggregatorLink,
+                        aggregatorName: jobs[index].aggregatorName,
+                        datePosted: jobs[index].datePosted,
+                        notes: jobs[index].notes,
+                        isFAANG: jobs[index].isFAANG,
+                        isInternship: jobs[index].isInternship,
+                        lastViewed: jobs[index].lastViewed,
+                        userStatus: status,
+                        statusChangedAt: status == .new ? nil : Date()
+                    )
+                }
+            } catch {
+                errorMessage = "Failed to update status: \(error.localizedDescription)"
+            }
         }
     }
+
+    /// Color for job row based on status
+    private func jobRowColor(_ job: JobPosting) -> Color {
+        switch job.userStatus {
+        case .new:
+            return .primary
+        case .applied:
+            return .green
+        case .ignored:
+            return .secondary.opacity(0.5)
+        }
+    }
+
 }
 
 // MARK: - Category Filter Button
@@ -745,6 +829,98 @@ struct CategoryFilterButton: View {
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Job Status Cell
+
+struct JobStatusCell: View {
+    let job: JobPosting
+    let formatDate: (Date) -> String
+    let onApplied: () -> Void
+    let onIgnored: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            switch job.userStatus {
+            case .new:
+                // Show action buttons for new jobs
+                Button {
+                    onApplied()
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.green.opacity(0.7))
+                .help("Mark as Applied")
+
+                Button {
+                    onIgnored()
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary.opacity(0.7))
+                .help("Mark as Ignored")
+
+            case .applied:
+                HStack(spacing: 4) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                            Text("Applied")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.green)
+                        if let date = job.statusChangedAt {
+                            Text(formatDate(date))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button {
+                        onReset()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary.opacity(0.5))
+                    .help("Reset to New")
+                }
+
+            case .ignored:
+                HStack(spacing: 4) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                            Text("Ignored")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                        if let date = job.statusChangedAt {
+                            Text(formatDate(date))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button {
+                        onReset()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary.opacity(0.5))
+                    .help("Reset to New")
+                }
+            }
+        }
     }
 }
 

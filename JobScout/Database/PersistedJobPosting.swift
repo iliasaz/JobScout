@@ -41,6 +41,10 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     @Column("last_viewed")
     var lastViewed: Date?
 
+    // Status fields (populated from JOIN with user_job_status)
+    var userStatus: JobStatus = .new
+    var statusChangedAt: Date?
+
     /// Convert from in-memory JobPosting
     static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
         // unique_link is required - prefer company link, fall back to aggregator link
@@ -83,7 +87,9 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             notes: notes,
             isFAANG: isFAANG,
             isInternship: isInternship,
-            lastViewed: lastViewed
+            lastViewed: lastViewed,
+            userStatus: userStatus,
+            statusChangedAt: statusChangedAt
         )
     }
 }

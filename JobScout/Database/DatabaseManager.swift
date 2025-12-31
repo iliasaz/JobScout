@@ -243,6 +243,26 @@ actor DatabaseManager {
             }
         }
 
+        // Migration 6: Rename applied_at to status_changed_at in user_job_status
+        migrator.registerMigration("006_RenameAppliedAtToStatusChangedAt") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(user_job_status)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            // Add status_changed_at if it doesn't exist
+            if !columnNames.contains("status_changed_at") {
+                try db.execute(sql: """
+                    ALTER TABLE user_job_status ADD COLUMN "status_changed_at" TEXT
+                    """)
+
+                // Copy data from applied_at if it exists
+                if columnNames.contains("applied_at") {
+                    try db.execute(sql: """
+                        UPDATE user_job_status SET status_changed_at = applied_at
+                        """)
+                }
+            }
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

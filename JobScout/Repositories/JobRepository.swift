@@ -263,7 +263,7 @@ actor JobRepository {
         }
     }
 
-    /// Get all jobs, optionally filtered by source
+    /// Get all jobs, optionally filtered by source, with status info
     func getJobs(sourceId: Int? = nil) async throws -> [PersistedJobPosting] {
         let db = try await dbManager.getDatabase()
 
@@ -272,10 +272,21 @@ actor JobRepository {
             let arguments: StatementArguments
 
             if let sourceId = sourceId {
-                sql = "SELECT * FROM job_postings WHERE source_id = ? ORDER BY created_at DESC"
+                sql = """
+                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at
+                    FROM job_postings jp
+                    LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                    WHERE jp.source_id = ?
+                    ORDER BY jp.created_at DESC
+                    """
                 arguments = [sourceId]
             } else {
-                sql = "SELECT * FROM job_postings ORDER BY created_at DESC"
+                sql = """
+                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at
+                    FROM job_postings jp
+                    LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                    ORDER BY jp.created_at DESC
+                    """
                 arguments = []
             }
 
@@ -363,7 +374,7 @@ actor JobRepository {
                 UPDATE user_job_status SET
                     status = ?,
                     notes = COALESCE(?, notes),
-                    applied_at = CASE WHEN ? = 'applied' THEN datetime('now') ELSE applied_at END,
+                    status_changed_at = CASE WHEN ? != 'new' THEN datetime('now') ELSE status_changed_at END,
                     updated_at = datetime('now')
                 WHERE job_id = ?
                 """, arguments: [status.rawValue, notes, status.rawValue, jobId])
@@ -371,8 +382,8 @@ actor JobRepository {
             // If no row was updated, insert new status
             if db.changesCount == 0 {
                 try db.execute(sql: """
-                    INSERT INTO user_job_status (job_id, status, notes, applied_at, created_at, updated_at)
-                    VALUES (?, ?, ?, CASE WHEN ? = 'applied' THEN datetime('now') ELSE NULL END, datetime('now'), datetime('now'))
+                    INSERT INTO user_job_status (job_id, status, notes, status_changed_at, created_at, updated_at)
+                    VALUES (?, ?, ?, CASE WHEN ? != 'new' THEN datetime('now') ELSE NULL END, datetime('now'), datetime('now'))
                     """, arguments: [jobId, status.rawValue, notes, status.rawValue])
             }
         }
@@ -394,7 +405,7 @@ actor JobRepository {
                 jobId: row["job_id"],
                 status: JobStatus(rawValue: row["status"]) ?? .new,
                 notes: row["notes"],
-                appliedAt: row["applied_at"],
+                statusChangedAt: row["status_changed_at"],
                 createdAt: row["created_at"],
                 updatedAt: row["updated_at"]
             )
@@ -450,7 +461,11 @@ actor JobRepository {
 
     /// Create a PersistedJobPosting from a database row
     private static func jobPosting(from row: Row) -> PersistedJobPosting {
-        PersistedJobPosting(
+        // Parse user status from joined data
+        let userStatusString: String? = row["user_status"]
+        let userStatus = userStatusString.flatMap { JobStatus(rawValue: $0) } ?? .new
+
+        return PersistedJobPosting(
             id: row["id"],
             sourceId: row["source_id"],
             company: row["company"],
@@ -468,7 +483,9 @@ actor JobRepository {
             isInternship: row["is_internship"] == 1,
             createdAt: row["created_at"],
             updatedAt: row["updated_at"],
-            lastViewed: row["last_viewed"]
+            lastViewed: row["last_viewed"],
+            userStatus: userStatus,
+            statusChangedAt: row["status_changed_at"]
         )
     }
 

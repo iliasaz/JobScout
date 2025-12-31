@@ -30,6 +30,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let isFAANG: Bool   // True if company is a FAANG-like company (marked with fire emoji)
     let isInternship: Bool  // True if role contains "intern"
     let lastViewed: Date?  // Timestamp when Apply button was last clicked
+    let userStatus: JobStatus  // User's status (new, applied, ignored)
+    let statusChangedAt: Date?  // Timestamp when status was changed
 
     init(
         persistedId: Int? = nil,
@@ -45,7 +47,9 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         notes: String? = nil,
         isFAANG: Bool = false,
         isInternship: Bool? = nil,
-        lastViewed: Date? = nil
+        lastViewed: Date? = nil,
+        userStatus: JobStatus = .new,
+        statusChangedAt: Date? = nil
     ) {
         self.persistedId = persistedId
         self.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -63,6 +67,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.isFAANG = isFAANG
         self.isInternship = isInternship ?? cleanedRole.localizedCaseInsensitiveContains("intern")
         self.lastViewed = lastViewed
+        self.userStatus = userStatus
+        self.statusChangedAt = statusChangedAt
     }
 
     /// Extracts country from location string, defaults to "USA"

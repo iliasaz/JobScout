@@ -11,18 +11,22 @@ import StructuredQueries
 /// User's interaction status with a job posting
 enum JobStatus: String, QueryBindable, Codable, Sendable, CaseIterable {
     case new = "new"
-    case interested = "interested"
     case applied = "applied"
-    case rejected = "rejected"
-    case archived = "archived"
+    case ignored = "ignored"
 
     var displayName: String {
         switch self {
         case .new: return "New"
-        case .interested: return "Interested"
         case .applied: return "Applied"
-        case .rejected: return "Rejected"
-        case .archived: return "Archived"
+        case .ignored: return "Ignored"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .new: return ""
+        case .applied: return "✓"
+        case .ignored: return "✗"
         }
     }
 }
@@ -35,8 +39,8 @@ struct UserJobStatus: Identifiable, Sendable {
     var jobId: Int
     var status: JobStatus
     var notes: String?
-    @Column("applied_at")
-    var appliedAt: Date?
+    @Column("status_changed_at")
+    var statusChangedAt: Date?
     @Column("created_at")
     let createdAt: Date
     @Column("updated_at")
