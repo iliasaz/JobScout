@@ -47,6 +47,24 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     var userStatus: JobStatus = .new
     var statusChangedAt: Date?
 
+    // Analysis fields
+    @Column("description_text")
+    var descriptionText: String?
+    @Column("analysis_status")
+    var analysisStatusRaw: String?
+    @Column("analysis_error")
+    var analysisError: String?
+    @Column("analyzed_at")
+    var analyzedAt: Date?
+
+    /// Parsed analysis status
+    var analysisStatus: AnalysisStatus? {
+        analysisStatusRaw.flatMap { AnalysisStatus(rawValue: $0) }
+    }
+
+    // Salary display (populated from JOIN with job_description_analysis)
+    var salaryDisplay: String?
+
     /// Convert from in-memory JobPosting
     static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
         // unique_link is required - prefer company link, fall back to aggregator link
@@ -92,7 +110,11 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             isInternship: isInternship,
             lastViewed: lastViewed,
             userStatus: userStatus,
-            statusChangedAt: statusChangedAt
+            statusChangedAt: statusChangedAt,
+            descriptionText: descriptionText,
+            analysisStatus: analysisStatus,
+            analysisError: analysisError,
+            salaryDisplay: salaryDisplay
         )
     }
 }

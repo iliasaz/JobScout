@@ -13,6 +13,7 @@ struct URLComboBox: View {
     let placeholder: String
     let sources: [JobSource]
     let onDelete: (String) -> Void
+    var onSubmit: (() -> Void)? = nil
 
     @State private var isShowingDropdown = false
     @FocusState private var isTextFieldFocused: Bool
@@ -23,6 +24,9 @@ struct URLComboBox: View {
                 .textFieldStyle(.plain)
                 .focused($isTextFieldFocused)
                 .disableAutocorrection(true)
+                .onSubmit {
+                    onSubmit?()
+                }
 
             // Dropdown button
             if !sources.isEmpty {

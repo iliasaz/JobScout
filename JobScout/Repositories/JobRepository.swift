@@ -287,18 +287,22 @@ actor JobRepository {
 
             if let sourceId = sourceId {
                 sql = """
-                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at
+                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at,
+                           jda.salary_min, jda.salary_max, jda.salary_currency, jda.salary_period
                     FROM job_postings jp
                     LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                    LEFT JOIN job_description_analysis jda ON jp.id = jda.job_id
                     WHERE jp.source_id = ?
                     ORDER BY jp.created_at DESC
                     """
                 arguments = [sourceId]
             } else {
                 sql = """
-                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at
+                    SELECT jp.*, ujs.status as user_status, ujs.status_changed_at,
+                           jda.salary_min, jda.salary_max, jda.salary_currency, jda.salary_period
                     FROM job_postings jp
                     LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                    LEFT JOIN job_description_analysis jda ON jp.id = jda.job_id
                     ORDER BY jp.created_at DESC
                     """
                 arguments = []
@@ -479,6 +483,40 @@ actor JobRepository {
         let userStatusString: String? = row["user_status"]
         let userStatus = userStatusString.flatMap { JobStatus(rawValue: $0) } ?? .new
 
+        // Build salary display string if we have salary data
+        var salaryDisplay: String?
+        if let salaryMin: Int = row["salary_min"], let salaryMax: Int = row["salary_max"] {
+            let currency = (row["salary_currency"] as String?) ?? "USD"
+            let period = (row["salary_period"] as String?) ?? "yearly"
+            let salaryInfo = SalaryInfo(
+                min: salaryMin,
+                max: salaryMax,
+                currency: currency,
+                period: SalaryInfo.SalaryPeriod(rawValue: period) ?? .yearly
+            )
+            salaryDisplay = salaryInfo.displayString
+        } else if let salaryMin: Int = row["salary_min"] {
+            let currency = (row["salary_currency"] as String?) ?? "USD"
+            let period = (row["salary_period"] as String?) ?? "yearly"
+            let salaryInfo = SalaryInfo(
+                min: salaryMin,
+                max: nil,
+                currency: currency,
+                period: SalaryInfo.SalaryPeriod(rawValue: period) ?? .yearly
+            )
+            salaryDisplay = salaryInfo.displayString
+        } else if let salaryMax: Int = row["salary_max"] {
+            let currency = (row["salary_currency"] as String?) ?? "USD"
+            let period = (row["salary_period"] as String?) ?? "yearly"
+            let salaryInfo = SalaryInfo(
+                min: nil,
+                max: salaryMax,
+                currency: currency,
+                period: SalaryInfo.SalaryPeriod(rawValue: period) ?? .yearly
+            )
+            salaryDisplay = salaryInfo.displayString
+        }
+
         return PersistedJobPosting(
             id: row["id"],
             sourceId: row["source_id"],
@@ -500,7 +538,12 @@ actor JobRepository {
             updatedAt: row["updated_at"],
             lastViewed: row["last_viewed"],
             userStatus: userStatus,
-            statusChangedAt: row["status_changed_at"]
+            statusChangedAt: row["status_changed_at"],
+            descriptionText: row["description_text"],
+            analysisStatusRaw: row["analysis_status"],
+            analysisError: row["analysis_error"],
+            analyzedAt: row["analyzed_at"],
+            salaryDisplay: salaryDisplay
         )
     }
 
@@ -514,6 +557,248 @@ actor JobRepository {
             try db.execute(sql: """
                 UPDATE job_postings SET last_viewed = datetime('now') WHERE id = ?
                 """, arguments: [jobId])
+        }
+    }
+
+    // MARK: - Job Description Analysis
+
+    /// Set analysis status for a job
+    func setAnalysisStatus(jobId: Int, status: AnalysisStatus, error: String? = nil) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            if status == .completed {
+                try db.execute(sql: """
+                    UPDATE job_postings SET
+                        analysis_status = ?,
+                        analysis_error = NULL,
+                        analyzed_at = datetime('now'),
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """, arguments: [status.rawValue, jobId])
+            } else if status == .failed {
+                try db.execute(sql: """
+                    UPDATE job_postings SET
+                        analysis_status = ?,
+                        analysis_error = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """, arguments: [status.rawValue, error, jobId])
+            } else {
+                try db.execute(sql: """
+                    UPDATE job_postings SET
+                        analysis_status = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """, arguments: [status.rawValue, jobId])
+            }
+        }
+    }
+
+    /// Get next job pending analysis
+    func getNextPendingAnalysis() async throws -> PersistedJobPosting? {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT jp.*, ujs.status as user_status, ujs.status_changed_at
+                FROM job_postings jp
+                LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                WHERE jp.analysis_status = 'pending'
+                ORDER BY jp.created_at ASC
+                LIMIT 1
+                """)
+            return row.map { Self.jobPosting(from: $0) }
+        }
+    }
+
+    /// Queue all unanalyzed jobs for analysis
+    func queueUnanalyzedJobs() async throws -> Int {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.write { db in
+            try db.execute(sql: """
+                UPDATE job_postings SET analysis_status = 'pending'
+                WHERE analysis_status IS NULL
+                AND (company_link IS NOT NULL OR aggregator_link IS NOT NULL)
+                """)
+            return db.changesCount
+        }
+    }
+
+    /// Queue specific jobs for analysis (e.g., newly saved jobs)
+    func queueJobsForAnalysis(jobIds: [Int]) async throws {
+        guard !jobIds.isEmpty else { return }
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            let placeholders = jobIds.map { _ in "?" }.joined(separator: ", ")
+            try db.execute(sql: """
+                UPDATE job_postings SET analysis_status = 'pending'
+                WHERE id IN (\(placeholders))
+                AND (company_link IS NOT NULL OR aggregator_link IS NOT NULL)
+                """, arguments: StatementArguments(jobIds))
+        }
+    }
+
+    /// Save job description text
+    func saveJobDescription(jobId: Int, description: String) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            try db.execute(sql: """
+                UPDATE job_postings SET
+                    description_text = ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """, arguments: [description, jobId])
+        }
+    }
+
+    /// Save analysis results
+    func saveAnalysisResult(jobId: Int, result: JobDescriptionAnalysisOutput) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            // Save or update analysis record
+            try db.execute(sql: """
+                INSERT INTO job_description_analysis (
+                    job_id, salary_min, salary_max, salary_currency, salary_period,
+                    has_stock_compensation, stock_type, stock_details, job_summary,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                ON CONFLICT(job_id) DO UPDATE SET
+                    salary_min = excluded.salary_min,
+                    salary_max = excluded.salary_max,
+                    salary_currency = excluded.salary_currency,
+                    salary_period = excluded.salary_period,
+                    has_stock_compensation = excluded.has_stock_compensation,
+                    stock_type = excluded.stock_type,
+                    stock_details = excluded.stock_details,
+                    job_summary = excluded.job_summary,
+                    updated_at = datetime('now')
+                """, arguments: [
+                    jobId,
+                    result.salary?.min,
+                    result.salary?.max,
+                    result.salary?.currency ?? "USD",
+                    result.salary?.period ?? "yearly",
+                    result.stock?.hasStock == true ? 1 : 0,
+                    result.stock?.type,
+                    result.stock?.details,
+                    result.summary
+                ])
+
+            // Save technologies (delete existing first, then insert new)
+            try db.execute(sql: "DELETE FROM job_technologies WHERE job_id = ?", arguments: [jobId])
+
+            for tech in result.technologies {
+                try db.execute(sql: """
+                    INSERT INTO job_technologies (job_id, technology, category, is_required, created_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                    """, arguments: [
+                        jobId,
+                        tech.name,
+                        tech.category,
+                        tech.required ? 1 : 0
+                    ])
+            }
+        }
+    }
+
+    /// Get job analysis result
+    func getJobAnalysis(jobId: Int) async throws -> JobAnalysisResult? {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            // Get analysis record
+            guard let analysisRow = try Row.fetchOne(db, sql: """
+                SELECT * FROM job_description_analysis WHERE job_id = ?
+                """, arguments: [jobId]) else {
+                return nil
+            }
+
+            // Get technologies
+            let techRows = try Row.fetchAll(db, sql: """
+                SELECT * FROM job_technologies WHERE job_id = ? ORDER BY is_required DESC, technology ASC
+                """, arguments: [jobId])
+
+            let technologies = techRows.map { row in
+                JobTechnology(
+                    id: row["id"],
+                    technology: row["technology"],
+                    category: (row["category"] as String?).flatMap { JobTechnology.TechnologyCategory(rawValue: $0) },
+                    isRequired: row["is_required"] == 1
+                )
+            }
+
+            // Build salary info
+            var salaryInfo: SalaryInfo?
+            let salaryMin: Int? = analysisRow["salary_min"]
+            let salaryMax: Int? = analysisRow["salary_max"]
+            if salaryMin != nil || salaryMax != nil {
+                salaryInfo = SalaryInfo(
+                    min: salaryMin,
+                    max: salaryMax,
+                    currency: analysisRow["salary_currency"] ?? "USD",
+                    period: SalaryInfo.SalaryPeriod(rawValue: analysisRow["salary_period"] ?? "yearly") ?? .yearly
+                )
+            }
+
+            // Build stock info
+            let hasStock: Bool = analysisRow["has_stock_compensation"] == 1
+            let stockInfo = StockInfo(
+                hasStock: hasStock,
+                type: (analysisRow["stock_type"] as String?).flatMap { StockInfo.StockType(rawValue: $0) },
+                details: analysisRow["stock_details"]
+            )
+
+            return JobAnalysisResult(
+                jobId: jobId,
+                salary: salaryInfo,
+                stock: hasStock ? stockInfo : nil,
+                technologies: technologies,
+                summary: analysisRow["job_summary"],
+                analyzedAt: analysisRow["updated_at"] ?? Date()
+            )
+        }
+    }
+
+    /// Get technologies for a job
+    func getJobTechnologies(jobId: Int) async throws -> [JobTechnology] {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM job_technologies WHERE job_id = ? ORDER BY is_required DESC, technology ASC
+                """, arguments: [jobId])
+
+            return rows.map { row in
+                JobTechnology(
+                    id: row["id"],
+                    technology: row["technology"],
+                    category: (row["category"] as String?).flatMap { JobTechnology.TechnologyCategory(rawValue: $0) },
+                    isRequired: row["is_required"] == 1
+                )
+            }
+        }
+    }
+
+    /// Get count of jobs pending analysis
+    func getPendingAnalysisCount() async throws -> Int {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM job_postings WHERE analysis_status = 'pending'") ?? 0
+        }
+    }
+
+    /// Get count of jobs being processed
+    func getProcessingAnalysisCount() async throws -> Int {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM job_postings WHERE analysis_status = 'processing'") ?? 0
         }
     }
 }

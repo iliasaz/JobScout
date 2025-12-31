@@ -275,6 +275,80 @@ actor DatabaseManager {
             }
         }
 
+        // Migration 8: Add job description analysis tables and columns
+        migrator.registerMigration("008_AddJobDescriptionAnalysis") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            // Add columns to job_postings for raw description and analysis status
+            if !columnNames.contains("description_text") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "description_text" TEXT
+                    """)
+            }
+
+            if !columnNames.contains("analysis_status") {
+                // Status: pending/processing/completed/failed
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "analysis_status" TEXT
+                    """)
+            }
+
+            if !columnNames.contains("analysis_error") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "analysis_error" TEXT
+                    """)
+            }
+
+            if !columnNames.contains("analyzed_at") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "analyzed_at" TEXT
+                    """)
+            }
+
+            // Create job_description_analysis table for extracted data
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS "job_description_analysis" (
+                    "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "job_id" INTEGER NOT NULL UNIQUE REFERENCES "job_postings"("id") ON DELETE CASCADE,
+                    "salary_min" INTEGER,
+                    "salary_max" INTEGER,
+                    "salary_currency" TEXT DEFAULT 'USD',
+                    "salary_period" TEXT DEFAULT 'yearly',
+                    "has_stock_compensation" INTEGER DEFAULT 0,
+                    "stock_type" TEXT,
+                    "stock_details" TEXT,
+                    "job_summary" TEXT,
+                    "created_at" TEXT NOT NULL DEFAULT (datetime('now')),
+                    "updated_at" TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+                """)
+
+            // Create job_technologies table for many-to-many relationship
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS "job_technologies" (
+                    "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "job_id" INTEGER NOT NULL REFERENCES "job_postings"("id") ON DELETE CASCADE,
+                    "technology" TEXT NOT NULL,
+                    "category" TEXT,
+                    "is_required" INTEGER DEFAULT 1,
+                    "created_at" TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE("job_id", "technology")
+                )
+                """)
+
+            // Create indexes
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS "idx_job_analysis_job_id" ON "job_description_analysis"("job_id")
+                """)
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS "idx_job_technologies_job_id" ON "job_technologies"("job_id")
+                """)
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS "idx_job_postings_analysis_status" ON "job_postings"("analysis_status")
+                """)
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

@@ -34,6 +34,15 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let userStatus: JobStatus  // User's status (new, applied, ignored)
     let statusChangedAt: Date?  // Timestamp when status was changed
 
+    // Analysis fields
+    let descriptionText: String?  // Raw job description text
+    let analysisStatus: AnalysisStatus?  // Status of analysis (pending/processing/completed/failed)
+    let analysisError: String?  // Error message if analysis failed
+    let salaryDisplay: String?  // Pre-formatted salary string (e.g., "$150k - $200k/yr")
+
+    /// True if job has completed analysis with details available
+    var hasDetails: Bool { analysisStatus == .completed }
+
     init(
         persistedId: Int? = nil,
         company: String,
@@ -51,7 +60,11 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         isInternship: Bool? = nil,
         lastViewed: Date? = nil,
         userStatus: JobStatus = .new,
-        statusChangedAt: Date? = nil
+        statusChangedAt: Date? = nil,
+        descriptionText: String? = nil,
+        analysisStatus: AnalysisStatus? = nil,
+        analysisError: String? = nil,
+        salaryDisplay: String? = nil
     ) {
         self.persistedId = persistedId
         self.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,6 +85,10 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.lastViewed = lastViewed
         self.userStatus = userStatus
         self.statusChangedAt = statusChangedAt
+        self.descriptionText = descriptionText
+        self.analysisStatus = analysisStatus
+        self.analysisError = analysisError
+        self.salaryDisplay = salaryDisplay
     }
 
     /// Extracts country from location string, defaults to "USA"
@@ -257,6 +274,37 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     /// Sort date for comparison - returns distant past for nil dates so they sort last
     var sortDate: Date {
         parsedDate ?? Date.distantPast
+    }
+
+    /// Create a copy with updated fields (preserves all other fields)
+    func updating(
+        lastViewed: Date? = nil,
+        userStatus: JobStatus? = nil,
+        statusChangedAt: Date?? = nil
+    ) -> JobPosting {
+        JobPosting(
+            persistedId: self.persistedId,
+            company: self.company,
+            role: self.role,
+            location: self.location,
+            country: self.country,
+            category: self.category,
+            companyWebsite: self.companyWebsite,
+            companyLink: self.companyLink,
+            aggregatorLink: self.aggregatorLink,
+            aggregatorName: self.aggregatorName,
+            datePosted: self.datePosted,
+            notes: self.notes,
+            isFAANG: self.isFAANG,
+            isInternship: self.isInternship,
+            lastViewed: lastViewed ?? self.lastViewed,
+            userStatus: userStatus ?? self.userStatus,
+            statusChangedAt: statusChangedAt ?? self.statusChangedAt,
+            descriptionText: self.descriptionText,
+            analysisStatus: self.analysisStatus,
+            analysisError: self.analysisError,
+            salaryDisplay: self.salaryDisplay
+        )
     }
 }
 

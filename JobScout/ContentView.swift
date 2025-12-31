@@ -44,6 +44,12 @@ struct ContentView: View {
     @State private var showingClearConfirmation = false
     @State private var harmonizationInfo: String?
     @State private var isHarmonizing = false
+    @State private var selectedJobId: Int?
+    @State private var selectedJobAnalysis: JobAnalysisResult?
+    @State private var selectedJobTechnologies: [JobTechnology] = []
+
+    // Observe the analysis service for processing state
+    @ObservedObject private var analysisService = JobAnalysisService.shared
 
     private let parser = DeterministicTableParser()
     private let repository = JobRepository()
@@ -54,6 +60,12 @@ struct ContentView: View {
     /// All unique categories from loaded jobs
     var availableCategories: [String] {
         Array(Set(jobs.map { $0.category })).sorted()
+    }
+
+    /// Currently selected job for the inspector
+    var selectedJob: JobPosting? {
+        guard let id = selectedJobId else { return nil }
+        return jobs.first { $0.persistedId == id }
     }
 
     var filteredJobs: [JobPosting] {
@@ -119,6 +131,48 @@ struct ContentView: View {
     }
 
     var body: some View {
+        HSplitView {
+            // Main content
+            mainContent
+
+            // Inspector sidebar (conditional)
+            if let job = selectedJob, job.hasDetails {
+                JobInspectorView(
+                    job: job,
+                    analysis: selectedJobAnalysis,
+                    technologies: selectedJobTechnologies,
+                    onClose: { selectedJobId = nil },
+                    onApplyClick: { _ in
+                        // Track the click if job is persisted
+                        if let jobId = job.persistedId {
+                            Task {
+                                do {
+                                    try await repository.recordApplyClick(jobId: jobId)
+                                    updateLocalJob(jobId: jobId) { job in
+                                        job.updating(lastViewed: Date())
+                                    }
+                                } catch {
+                                    // Silently ignore
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        .onChange(of: selectedJobId) { _, newId in
+            loadJobAnalysis(jobId: newId)
+        }
+        .onChange(of: analysisService.completedCount) { _, _ in
+            // Reload jobs when analysis completes to show updated status/icons
+            Task {
+                await reloadJobsFromDatabase()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
         VStack(spacing: 12) {
             // URL Input
             HStack {
@@ -131,6 +185,10 @@ struct ContentView: View {
                             await urlHistoryService.removeURL(url)
                             await loadURLSources()
                         }
+                    },
+                    onSubmit: {
+                        // When Enter is pressed, fetch the current URL
+                        fetchAndParse()
                     }
                 )
 
@@ -147,20 +205,12 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isLoading || isSaving)
 
-                if !jobs.isEmpty {
-                    Button {
-                        saveJobsToDatabase()
-                    } label: {
-                        if isSaving {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Text("Save")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isLoading || isSaving)
+                Button("Fetch All") {
+                    fetchAllSources()
                 }
+                .buttonStyle(.bordered)
+                .disabled(isLoading || isSaving || urlSources.isEmpty)
+                .help("Fetch from all saved sources")
 
                 Button("Load Saved") {
                     loadSavedJobs()
@@ -302,13 +352,15 @@ struct ContentView: View {
                     TableColumn("Status") { job in
                         JobStatusCell(
                             job: job,
+                            isProcessing: job.persistedId.map { analysisService.processingJobIds.contains($0) } ?? false,
                             formatDate: formatRelativeDate,
                             onApplied: { setJobStatus(job: job, status: .applied) },
                             onIgnored: { setJobStatus(job: job, status: .ignored) },
-                            onReset: { setJobStatus(job: job, status: .new) }
+                            onReset: { setJobStatus(job: job, status: .new) },
+                            onShowDetails: { selectedJobId = job.persistedId }
                         )
                     }
-                    .width(min: 100, ideal: 130)
+                    .width(min: 120, ideal: 150)
                     TableColumn("Company") { job in
                         if let website = job.companyWebsite, let url = URL(string: website) {
                             Button(job.company) {
@@ -381,9 +433,13 @@ struct ContentView: View {
                         }
                     }
                     .width(min: 100, ideal: 140)
-                    TableColumn("Last Viewed") { job in
-                        if let lastViewed = job.lastViewed {
-                            Text(formatRelativeDate(lastViewed))
+                    TableColumn("Salary") { job in
+                        if let salary = job.salaryDisplay {
+                            Text(salary)
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        } else if job.analysisStatus == .processing {
+                            Text("...")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -391,18 +447,22 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .width(min: 70, ideal: 90)
+                    .width(min: 80, ideal: 100)
                 }
             }
         }
         .padding()
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
-            loadSavedJobs()
             Task {
                 // Populate default URLs if this is first run
                 await urlHistoryService.populateDefaultsIfNeeded()
                 await loadURLSources()
+
+                // Auto-fetch from all sources on app start
+                await MainActor.run {
+                    fetchAllSources()
+                }
             }
         }
         .toolbar {
@@ -433,7 +493,12 @@ struct ContentView: View {
     // MARK: - Methods
 
     private func fetchAndParse() {
-        guard let url = rawGitHubURL(from: urlText) else {
+        fetchFromURL(urlText)
+    }
+
+    /// Fetch from a specific URL, parse, harmonize, and auto-save
+    private func fetchFromURL(_ sourceURL: String) {
+        guard let url = rawGitHubURL(from: sourceURL) else {
             errorMessage = "Invalid URL"
             return
         }
@@ -460,7 +525,7 @@ struct ContentView: View {
                 }
 
                 // Extract page title from content
-                let pageTitle = extractPageTitle(from: content)
+                let pageTitle = extractPageTitle(from: content, sourceURL: sourceURL)
 
                 let totalRows = tables.reduce(0) { $0 + $1.rowCount }
                 let limitInfo = maxRows > 0 ? " (limited to \(maxRows))" : ""
@@ -472,7 +537,10 @@ struct ContentView: View {
 
                 if parsedJobs.isEmpty && !tables.isEmpty {
                     errorMessage = "Found tables but couldn't extract job postings. Headers may not match expected format."
-                    jobs = []
+                    return
+                }
+
+                if parsedJobs.isEmpty {
                     return
                 }
 
@@ -482,14 +550,8 @@ struct ContentView: View {
                 let result = await harmonizer.harmonize(
                     jobs: parsedJobs,
                     pageTitle: pageTitle,
-                    pageURL: urlText
+                    pageURL: sourceURL
                 )
-
-                // Update UI with harmonized jobs
-                jobs = result.jobs
-                selectedCategories.removeAll()
-                jobTypeFilter = .all
-                isHarmonizing = false
 
                 // Show harmonization info
                 if result.errors.isEmpty {
@@ -499,8 +561,13 @@ struct ContentView: View {
                     errorMessage = result.errors.joined(separator: "\n")
                 }
 
+                isHarmonizing = false
+
+                // Auto-save to database
+                await saveJobsFromSource(result.jobs, sourceURL: sourceURL)
+
                 // Save URL to history after successful fetch
-                await saveURLToHistory()
+                await saveURLToHistory(sourceURL)
             } catch {
                 errorMessage = "Error: \(error.localizedDescription)"
                 isLoading = false
@@ -509,8 +576,108 @@ struct ContentView: View {
         }
     }
 
+    /// Fetch from all saved sources
+    private func fetchAllSources() {
+        guard !urlSources.isEmpty else {
+            // No sources - just load saved jobs
+            loadSavedJobs()
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        analysisInfo = "Fetching from \(urlSources.count) sources..."
+        lastSaveInfo = nil
+
+        Task {
+            var totalNew = 0
+            var totalUpdated = 0
+            var totalSkipped = 0
+            var errors: [String] = []
+
+            for source in urlSources {
+                do {
+                    let result = try await fetchAndSaveFromSource(source.url)
+                    totalNew += result.savedCount
+                    totalUpdated += result.updatedCount
+                    totalSkipped += result.skippedCount
+                } catch {
+                    errors.append("\(source.name): \(error.localizedDescription)")
+                }
+            }
+
+            // Get total count
+            let totalCount = (try? await repository.getJobCount()) ?? 0
+
+            await MainActor.run {
+                savedJobCount = totalCount
+
+                // Build summary
+                var parts: [String] = []
+                if totalNew > 0 { parts.append("\(totalNew) new") }
+                if totalUpdated > 0 { parts.append("\(totalUpdated) updated") }
+                if totalSkipped > 0 { parts.append("\(totalSkipped) skipped") }
+                let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+                lastSaveInfo = "\(summary) | Total: \(totalCount)"
+
+                if !errors.isEmpty {
+                    errorMessage = errors.joined(separator: "\n")
+                }
+
+                analysisInfo = "Fetched from \(urlSources.count) sources"
+                isLoading = false
+            }
+
+            // Queue jobs for analysis
+            await analysisService.queueAllUnanalyzed()
+
+            // Reload jobs from database
+            await reloadJobsFromDatabase()
+        }
+    }
+
+    /// Fetch and save from a single source URL (used by fetchAllSources)
+    private func fetchAndSaveFromSource(_ sourceURL: String) async throws -> SaveResult {
+        guard let url = rawGitHubURL(from: sourceURL) else {
+            throw URLError(.badURL)
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let content = String(data: data, encoding: .utf8) ?? ""
+
+        // Parse
+        let tables = parser.parseTables(content)
+        var parsedJobs = parser.extractJobs(from: tables)
+
+        // Apply limit
+        let maxRows = UserDefaults.standard.integer(forKey: SettingsView.maxRowsKey)
+        if maxRows > 0 && parsedJobs.count > maxRows {
+            parsedJobs = Array(parsedJobs.prefix(maxRows))
+        }
+
+        guard !parsedJobs.isEmpty else {
+            return SaveResult(savedCount: 0, skippedCount: 0, updatedCount: 0)
+        }
+
+        // Harmonize
+        let pageTitle = extractPageTitle(from: content, sourceURL: sourceURL)
+        let result = await harmonizer.harmonize(
+            jobs: parsedJobs,
+            pageTitle: pageTitle,
+            pageURL: sourceURL
+        )
+
+        // Save
+        let sourceName = URL(string: sourceURL)?.lastPathComponent ?? "Unknown"
+        let source = try await repository.getOrCreateSource(url: sourceURL, name: sourceName)
+        let saveResult = try await repository.saveJobs(result.jobs, sourceId: source.id)
+        try await repository.updateLastFetched(sourceId: source.id)
+
+        return saveResult
+    }
+
     /// Extract page title from markdown/HTML content
-    private func extractPageTitle(from content: String) -> String {
+    private func extractPageTitle(from content: String, sourceURL: String? = nil) -> String {
         // Try markdown heading first (# Title)
         // Look for first line that starts with # and space
         let lines = content.components(separatedBy: .newlines)
@@ -536,7 +703,8 @@ struct ContentView: View {
         }
 
         // Fall back to URL-based title
-        if let url = URL(string: urlText) {
+        let urlForTitle = sourceURL ?? urlText
+        if let url = URL(string: urlForTitle) {
             let pathComponents = url.pathComponents.filter { $0 != "/" }
             if pathComponents.count >= 2 {
                 return pathComponents[pathComponents.count - 2] + "/" + pathComponents[pathComponents.count - 1]
@@ -577,52 +745,18 @@ struct ContentView: View {
         return URL(string: "https://raw.githubusercontent.com/\(rawPath)")
     }
 
-    /// Save current jobs to database
-    private func saveJobsToDatabase() {
-        guard !jobs.isEmpty else { return }
 
-        isSaving = true
-        lastSaveInfo = nil
-        errorMessage = nil
+    /// Reload jobs from database without resetting UI state
+    private func reloadJobsFromDatabase() async {
+        do {
+            let persistedJobs = try await repository.getJobs()
+            let loadedJobs = persistedJobs.map { $0.toJobPosting() }
 
-        Task {
-            do {
-                // Get or create source from current URL
-                let sourceName = URL(string: urlText)?.lastPathComponent ?? "Unknown"
-                let source = try await repository.getOrCreateSource(url: urlText, name: sourceName)
-
-                // Save jobs
-                let result = try await repository.saveJobs(jobs, sourceId: source.id)
-
-                // Update last fetched timestamp
-                try await repository.updateLastFetched(sourceId: source.id)
-
-                // Get total count
-                let totalCount = try await repository.getJobCount()
-
-                await MainActor.run {
-                    savedJobCount = totalCount
-                    // Build save info message
-                    var parts: [String] = []
-                    if result.savedCount > 0 {
-                        parts.append("\(result.savedCount) new")
-                    }
-                    if result.updatedCount > 0 {
-                        parts.append("\(result.updatedCount) updated")
-                    }
-                    if result.skippedCount > 0 {
-                        parts.append("\(result.skippedCount) skipped (no links)")
-                    }
-                    let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
-                    lastSaveInfo = "\(summary) | Total: \(totalCount)"
-                    isSaving = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = "Save error: \(error.localizedDescription)"
-                    isSaving = false
-                }
+            await MainActor.run {
+                jobs = loadedJobs
             }
+        } catch {
+            // Silently ignore reload errors
         }
     }
 
@@ -703,10 +837,64 @@ struct ContentView: View {
         urlSources = await urlHistoryService.getSources()
     }
 
-    /// Save current URL to history (creates or updates source in database)
-    private func saveURLToHistory() async {
-        await urlHistoryService.addURL(urlText)
+    /// Save URL to history (creates or updates source in database)
+    private func saveURLToHistory(_ url: String? = nil) async {
+        await urlHistoryService.addURL(url ?? urlText)
         await loadURLSources()
+    }
+
+    /// Save jobs from a specific source URL (used by fetchFromURL)
+    private func saveJobsFromSource(_ jobsToSave: [JobPosting], sourceURL: String) async {
+        guard !jobsToSave.isEmpty else { return }
+
+        isSaving = true
+        lastSaveInfo = nil
+
+        do {
+            // Get or create source
+            let sourceName = URL(string: sourceURL)?.lastPathComponent ?? "Unknown"
+            let source = try await repository.getOrCreateSource(url: sourceURL, name: sourceName)
+
+            // Save jobs
+            let result = try await repository.saveJobs(jobsToSave, sourceId: source.id)
+
+            // Update last fetched timestamp
+            try await repository.updateLastFetched(sourceId: source.id)
+
+            // Get total count
+            let totalCount = try await repository.getJobCount()
+
+            await MainActor.run {
+                savedJobCount = totalCount
+                // Build save info message
+                var parts: [String] = []
+                if result.savedCount > 0 {
+                    parts.append("\(result.savedCount) new")
+                }
+                if result.updatedCount > 0 {
+                    parts.append("\(result.updatedCount) updated")
+                }
+                if result.skippedCount > 0 {
+                    parts.append("\(result.skippedCount) skipped (no links)")
+                }
+                let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+                lastSaveInfo = "\(summary) | Total: \(totalCount)"
+                isSaving = false
+            }
+
+            // Queue saved jobs for analysis and start processing
+            if result.savedCount > 0 {
+                await analysisService.queueAllUnanalyzed()
+            }
+
+            // Reload jobs from database to show updated state
+            await reloadJobsFromDatabase()
+        } catch {
+            await MainActor.run {
+                errorMessage = "Save error: \(error.localizedDescription)"
+                isSaving = false
+            }
+        }
     }
 
     /// Open URL in browser and track the click in database
@@ -720,31 +908,20 @@ struct ContentView: View {
                 do {
                     try await repository.recordApplyClick(jobId: jobId)
                     // Update the local job's lastViewed
-                    if let index = jobs.firstIndex(where: { $0.persistedId == jobId }) {
-                        jobs[index] = JobPosting(
-                            persistedId: jobs[index].persistedId,
-                            company: jobs[index].company,
-                            role: jobs[index].role,
-                            location: jobs[index].location,
-                            country: jobs[index].country,
-                            category: jobs[index].category,
-                            companyWebsite: jobs[index].companyWebsite,
-                            companyLink: jobs[index].companyLink,
-                            aggregatorLink: jobs[index].aggregatorLink,
-                            aggregatorName: jobs[index].aggregatorName,
-                            datePosted: jobs[index].datePosted,
-                            notes: jobs[index].notes,
-                            isFAANG: jobs[index].isFAANG,
-                            isInternship: jobs[index].isInternship,
-                            lastViewed: Date(),
-                            userStatus: jobs[index].userStatus,
-                            statusChangedAt: jobs[index].statusChangedAt
-                        )
+                    updateLocalJob(jobId: jobId) { job in
+                        job.updating(lastViewed: Date())
                     }
                 } catch {
                     // Silently ignore tracking errors - don't interrupt user flow
                 }
             }
+        }
+    }
+
+    /// Update a local job in the jobs array
+    private func updateLocalJob(jobId: Int, transform: (JobPosting) -> JobPosting) {
+        if let index = jobs.firstIndex(where: { $0.persistedId == jobId }) {
+            jobs[index] = transform(jobs[index])
         }
     }
 
@@ -802,26 +979,11 @@ struct ContentView: View {
         Task {
             do {
                 try await repository.setJobStatus(jobId: jobId, status: status)
-                // Update local state
-                if let index = jobs.firstIndex(where: { $0.persistedId == jobId }) {
-                    jobs[index] = JobPosting(
-                        persistedId: jobs[index].persistedId,
-                        company: jobs[index].company,
-                        role: jobs[index].role,
-                        location: jobs[index].location,
-                        country: jobs[index].country,
-                        category: jobs[index].category,
-                        companyWebsite: jobs[index].companyWebsite,
-                        companyLink: jobs[index].companyLink,
-                        aggregatorLink: jobs[index].aggregatorLink,
-                        aggregatorName: jobs[index].aggregatorName,
-                        datePosted: jobs[index].datePosted,
-                        notes: jobs[index].notes,
-                        isFAANG: jobs[index].isFAANG,
-                        isInternship: jobs[index].isInternship,
-                        lastViewed: jobs[index].lastViewed,
+                // Update local state preserving all fields
+                updateLocalJob(jobId: jobId) { job in
+                    job.updating(
                         userStatus: status,
-                        statusChangedAt: status == .new ? nil : Date()
+                        statusChangedAt: status == .new ? .some(nil) : .some(Date())
                     )
                 }
             } catch {
@@ -839,6 +1001,33 @@ struct ContentView: View {
             return .green
         case .ignored:
             return .secondary.opacity(0.5)
+        }
+    }
+
+    /// Load job analysis data for inspector
+    private func loadJobAnalysis(jobId: Int?) {
+        guard let jobId = jobId else {
+            selectedJobAnalysis = nil
+            selectedJobTechnologies = []
+            return
+        }
+
+        Task {
+            do {
+                let analysis = try await repository.getJobAnalysis(jobId: jobId)
+                let technologies = try await repository.getJobTechnologies(jobId: jobId)
+
+                await MainActor.run {
+                    selectedJobAnalysis = analysis
+                    selectedJobTechnologies = technologies
+                }
+            } catch {
+                // Silently handle - job may not have analysis
+                await MainActor.run {
+                    selectedJobAnalysis = nil
+                    selectedJobTechnologies = []
+                }
+            }
         }
     }
 
@@ -874,16 +1063,32 @@ struct CategoryFilterButton: View {
 
 struct JobStatusCell: View {
     let job: JobPosting
+    let isProcessing: Bool
     let formatDate: (Date) -> String
     let onApplied: () -> Void
     let onIgnored: () -> Void
     let onReset: () -> Void
+    let onShowDetails: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
-            switch job.userStatus {
-            case .new:
-                // Show action buttons for new jobs
+            // LEFT SIDE: Actions and final states (left-aligned)
+            statusSection
+
+            Spacer(minLength: 4)
+
+            // RIGHT SIDE: Intermediate actions/states (right-aligned)
+            indicatorsSection
+        }
+    }
+
+    /// Left side: Status actions and final states
+    @ViewBuilder
+    private var statusSection: some View {
+        switch job.userStatus {
+        case .new:
+            // Show action buttons for new jobs
+            HStack(spacing: 4) {
                 Button {
                     onApplied()
                 } label: {
@@ -903,62 +1108,104 @@ struct JobStatusCell: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary.opacity(0.7))
                 .help("Mark as Ignored")
+            }
 
-            case .applied:
-                HStack(spacing: 4) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 2) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                            Text("Applied")
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.green)
-                        if let date = job.statusChangedAt {
-                            Text(formatDate(date))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+        case .applied:
+            HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                        Text("Applied")
+                            .font(.caption)
                     }
-                    Button {
-                        onReset()
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward.circle")
-                            .font(.system(size: 12))
+                    .foregroundStyle(.green)
+                    if let date = job.statusChangedAt {
+                        Text(formatDate(date))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary.opacity(0.5))
-                    .help("Reset to New")
                 }
+                Button {
+                    onReset()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary.opacity(0.5))
+                .help("Reset to New")
+            }
 
-            case .ignored:
-                HStack(spacing: 4) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 2) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                            Text("Ignored")
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.secondary)
-                        if let date = job.statusChangedAt {
-                            Text(formatDate(date))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+        case .ignored:
+            HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                        Text("Ignored")
+                            .font(.caption)
                     }
-                    Button {
-                        onReset()
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward.circle")
-                            .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    if let date = job.statusChangedAt {
+                        Text(formatDate(date))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary.opacity(0.5))
-                    .help("Reset to New")
                 }
+                Button {
+                    onReset()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary.opacity(0.5))
+                .help("Reset to New")
             }
         }
+    }
+
+    /// Right side: Processing status, viewed indicator, details icon
+    @ViewBuilder
+    private var indicatorsSection: some View {
+        HStack(spacing: 6) {
+            // Processing spinner
+            if isProcessing {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Analyzing job description...")
+            }
+
+            // Viewed indicator
+            if let lastViewed = job.lastViewed {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.blue.opacity(0.6))
+                    .help("Last viewed: \(formatFullDate(lastViewed))")
+            }
+
+            // Details available indicator (rightmost)
+            if job.hasDetails {
+                Button {
+                    onShowDetails()
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.purple.opacity(0.7))
+                .help("View job details")
+            }
+        }
+    }
+
+    /// Format date with full detail for tooltip
+    private func formatFullDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 

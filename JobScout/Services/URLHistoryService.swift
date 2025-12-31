@@ -13,8 +13,30 @@ actor URLHistoryService {
 
     private let repository: JobRepository
 
+    /// Default job source URLs to populate on first run
+    static let defaultURLs = [
+        "https://github.com/jobright-ai/2026-Software-Engineer-New-Grad/blob/master/README.md",
+        "https://github.com/SimplifyJobs/Summer2026-Internships/blob/dev/README.md",
+        "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
+    ]
+
     private init(repository: JobRepository = JobRepository()) {
         self.repository = repository
+    }
+
+    /// Populate default URLs if no sources exist
+    func populateDefaultsIfNeeded() async {
+        do {
+            let sources = try await repository.getSourcesByRecentUsage(limit: 1)
+            if sources.isEmpty {
+                // No sources exist, populate defaults
+                for url in Self.defaultURLs {
+                    _ = try await repository.touchSource(url: url)
+                }
+            }
+        } catch {
+            // Silently ignore errors
+        }
     }
 
     /// Get all saved URLs, most recent first

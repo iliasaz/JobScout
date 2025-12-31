@@ -9,7 +9,8 @@
       "WebFetch(domain:swiftpackageindex.com)",
       "Bash(xcrun xcresulttool:*)",
       "Bash(swift -e:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(swift test:*)"
     ]
   }
 }
