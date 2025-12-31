@@ -157,6 +157,7 @@ actor DataHarmonizer {
         }
 
         // Re-classify links using LinkClassifier
+        var companyWebsite = job.companyWebsite
         var companyLink = job.companyLink
         var aggregatorLink = job.aggregatorLink
         var aggregatorName = job.aggregatorName
@@ -175,6 +176,15 @@ actor DataHarmonizer {
                     aggregatorName = name
                 }
                 companyLink = nil
+            } else if LinkClassifier.isCompanyHomepage(link) {
+                // This is a company homepage, not a job posting
+                log.trace("Company link is a homepage, moving to companyWebsite", metadata: [
+                    "link": "\(link)"
+                ])
+                if companyWebsite == nil {
+                    companyWebsite = link
+                }
+                companyLink = nil
             }
         }
 
@@ -186,19 +196,35 @@ actor DataHarmonizer {
             }
         }
 
+        // Extract company website from company link if not already set
+        if companyWebsite == nil, let link = companyLink {
+            companyWebsite = LinkClassifier.extractCompanyHomepage(from: link)
+        }
+
+        // Extract company website from aggregator link if still not set
+        if companyWebsite == nil, let link = aggregatorLink {
+            // For aggregators, we can't extract company website directly
+            // but we might have other sources in the future
+        }
+
+        // Normalize category - strip emojis first
+        let normalizedJobCategory = normalizeCategory(job.category)
+        let normalizedInferredCategory = normalizeCategory(inferredCategory)
+
         // Determine category - use inferred if current is generic
         let finalCategory: String
-        let isGeneric = isGenericCategory(job.category)
-        if job.category == "Other" || job.category.isEmpty || isGeneric {
-            finalCategory = inferredCategory
+        let isGeneric = isGenericCategory(normalizedJobCategory)
+        if normalizedJobCategory == "Other" || normalizedJobCategory.isEmpty || isGeneric {
+            finalCategory = normalizedInferredCategory
             if isGeneric {
                 log.trace("Replacing generic category", metadata: [
                     "original": "\(job.category)",
-                    "replacement": "\(inferredCategory)"
+                    "normalized": "\(normalizedJobCategory)",
+                    "replacement": "\(normalizedInferredCategory)"
                 ])
             }
         } else {
-            finalCategory = job.category
+            finalCategory = normalizedJobCategory
         }
 
         return JobPosting(
@@ -207,6 +233,7 @@ actor DataHarmonizer {
             location: job.location,
             country: job.country,
             category: finalCategory,
+            companyWebsite: companyWebsite,
             companyLink: companyLink,
             aggregatorLink: aggregatorLink,
             aggregatorName: aggregatorName,
@@ -233,7 +260,10 @@ actor DataHarmonizer {
             "opportunities",
             "positions",
             "all jobs",
-            "other"
+            "other",
+            "see full",
+            "see more",
+            "view all"
         ]
 
         if genericExact.contains(lowercased) {
@@ -262,6 +292,26 @@ actor DataHarmonizer {
         }
 
         return false
+    }
+
+    /// Strip emojis and normalize a category string
+    private func normalizeCategory(_ category: String) -> String {
+        // Remove emojis and other symbols
+        let stripped = category.unicodeScalars.filter { scalar in
+            // Keep letters, numbers, spaces, punctuation
+            CharacterSet.letters.contains(scalar) ||
+            CharacterSet.decimalDigits.contains(scalar) ||
+            CharacterSet.whitespaces.contains(scalar) ||
+            CharacterSet.punctuationCharacters.contains(scalar)
+        }
+        let cleaned = String(String.UnicodeScalarView(stripped))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Collapse multiple spaces
+        let components = cleaned.components(separatedBy: .whitespaces)
+        let normalized = components.filter { !$0.isEmpty }.joined(separator: " ")
+
+        return normalized.isEmpty ? "Other" : normalized
     }
 
     /// Extract sample headers from jobs for context
@@ -311,6 +361,7 @@ actor DataHarmonizer {
             }
 
             // Re-classify links
+            var companyWebsite = job.companyWebsite
             var companyLink = job.companyLink
             var aggregatorLink = job.aggregatorLink
             var aggregatorName = job.aggregatorName
@@ -323,15 +374,30 @@ actor DataHarmonizer {
                         aggregatorName = name
                     }
                     companyLink = nil
+                } else if LinkClassifier.isCompanyHomepage(link) {
+                    if companyWebsite == nil {
+                        companyWebsite = link
+                    }
+                    companyLink = nil
                 }
             }
+
+            // Extract company website from company link if not already set
+            if companyWebsite == nil, let link = companyLink {
+                companyWebsite = LinkClassifier.extractCompanyHomepage(from: link)
+            }
+
+            // Normalize category
+            let normalizedCategory = normalizeCategory(job.category)
+            let finalCategory = isGenericCategory(normalizedCategory) ? "Other" : normalizedCategory
 
             return JobPosting(
                 company: job.company,
                 role: job.role,
                 location: job.location,
                 country: job.country,
-                category: job.category,
+                category: finalCategory,
+                companyWebsite: companyWebsite,
                 companyLink: companyLink,
                 aggregatorLink: aggregatorLink,
                 aggregatorName: aggregatorName,

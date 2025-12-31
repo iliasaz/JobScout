@@ -19,6 +19,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     var location: String
     var country: String
     var category: String
+    @Column("company_website")
+    var companyWebsite: String?
     @Column("company_link")
     var companyLink: String?
     @Column("aggregator_link")
@@ -80,6 +82,7 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             location: location,
             country: country,
             category: category,
+            companyWebsite: companyWebsite,
             companyLink: companyLink,
             aggregatorLink: aggregatorLink,
             aggregatorName: aggregatorName,

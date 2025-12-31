@@ -309,8 +309,17 @@ struct ContentView: View {
                     }
                     .width(min: 100, ideal: 130)
                     TableColumn("Company") { job in
-                        Text(job.company)
-                            .foregroundStyle(jobRowColor(job))
+                        if let website = job.companyWebsite, let url = URL(string: website) {
+                            Button(job.company) {
+                                NSWorkspace.shared.open(url)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(job.userStatus == .applied ? .green : .blue)
+                            .underline()
+                        } else {
+                            Text(job.company)
+                                .foregroundStyle(jobRowColor(job))
+                        }
                     }
                     .width(min: 100, ideal: 150)
                     TableColumn("Role") { job in
@@ -692,6 +701,7 @@ struct ContentView: View {
                             location: jobs[index].location,
                             country: jobs[index].country,
                             category: jobs[index].category,
+                            companyWebsite: jobs[index].companyWebsite,
                             companyLink: jobs[index].companyLink,
                             aggregatorLink: jobs[index].aggregatorLink,
                             aggregatorName: jobs[index].aggregatorName,
@@ -774,6 +784,7 @@ struct ContentView: View {
                         location: jobs[index].location,
                         country: jobs[index].country,
                         category: jobs[index].category,
+                        companyWebsite: jobs[index].companyWebsite,
                         companyLink: jobs[index].companyLink,
                         aggregatorLink: jobs[index].aggregatorLink,
                         aggregatorName: jobs[index].aggregatorName,

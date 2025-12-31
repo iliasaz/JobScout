@@ -263,6 +263,18 @@ actor DatabaseManager {
             }
         }
 
+        // Migration 7: Add company_website column to job_postings
+        migrator.registerMigration("007_AddCompanyWebsite") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            if !columnNames.contains("company_website") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "company_website" TEXT
+                    """)
+            }
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

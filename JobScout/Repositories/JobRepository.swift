@@ -201,9 +201,9 @@ actor JobRepository {
                     try db.execute(sql: """
                         INSERT INTO job_postings (
                             source_id, company, role, location, country, category,
-                            company_link, aggregator_link, aggregator_name, unique_link, date_posted, notes, is_faang, is_internship,
+                            company_website, company_link, aggregator_link, aggregator_name, unique_link, date_posted, notes, is_faang, is_internship,
                             created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                         """, arguments: [
                             sourceId,
                             job.company,
@@ -211,6 +211,7 @@ actor JobRepository {
                             job.location,
                             job.country,
                             job.category,
+                            job.companyWebsite,
                             job.companyLink,
                             job.aggregatorLink,
                             job.aggregatorName,
@@ -231,6 +232,7 @@ actor JobRepository {
                             location = ?,
                             country = ?,
                             category = ?,
+                            company_website = COALESCE(?, company_website),
                             company_link = ?,
                             aggregator_link = COALESCE(?, aggregator_link),
                             aggregator_name = COALESCE(?, aggregator_name),
@@ -247,6 +249,7 @@ actor JobRepository {
                             job.location,
                             job.country,
                             job.category,
+                            job.companyWebsite,
                             job.companyLink,
                             job.aggregatorLink,
                             job.aggregatorName,
@@ -473,6 +476,7 @@ actor JobRepository {
             location: row["location"],
             country: row["country"],
             category: row["category"],
+            companyWebsite: row["company_website"],
             companyLink: row["company_link"],
             aggregatorLink: row["aggregator_link"],
             aggregatorName: row["aggregator_name"],

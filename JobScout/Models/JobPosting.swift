@@ -22,7 +22,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let location: String
     let country: String         // Extracted country (defaults to "USA")
     let category: String        // Job category (Software Engineering, Product Management, etc.)
-    let companyLink: String?    // Direct link to company career page
+    let companyWebsite: String? // Company homepage URL (for clickable company name)
+    let companyLink: String?    // Direct link to company career page (job application)
     let aggregatorLink: String?   // Link to job aggregator (Simplify, Jobright, etc.)
     let aggregatorName: String?   // Name of the aggregator (e.g., "Simplify", "Jobright")
     let datePosted: String?
@@ -40,6 +41,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         location: String,
         country: String? = nil,
         category: String = "Other",
+        companyWebsite: String? = nil,
         companyLink: String? = nil,
         aggregatorLink: String? = nil,
         aggregatorName: String? = nil,
@@ -59,6 +61,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.location = cleanedLocation
         self.country = country ?? Self.extractCountry(from: cleanedLocation)
         self.category = category
+        self.companyWebsite = Self.cleanLink(companyWebsite)
         self.companyLink = Self.cleanLink(companyLink)
         self.aggregatorLink = Self.cleanLink(aggregatorLink)
         self.aggregatorName = aggregatorName
