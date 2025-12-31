@@ -48,6 +48,11 @@ struct ContentView: View {
     @State private var selectedJobAnalysis: JobAnalysisResult?
     @State private var selectedJobTechnologies: [JobTechnology] = []
 
+    // FTS search state
+    @State private var ftsSearchResults: [FTSSearchResult] = []
+    @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var isSearching = false
+
     // Observe the analysis service for processing state
     @ObservedObject private var analysisService = JobAnalysisService.shared
 
@@ -68,8 +73,26 @@ struct ContentView: View {
         return jobs.first { $0.persistedId == id }
     }
 
+    /// Whether we're currently using FTS search results
+    var isUsingFTSSearch: Bool {
+        !searchText.isEmpty && !ftsSearchResults.isEmpty
+    }
+
+    /// Get FTS highlight info for a specific job
+    func ftsHighlight(for job: JobPosting) -> FTSSearchResult? {
+        guard let persistedId = job.persistedId else { return nil }
+        return ftsSearchResults.first { $0.job.id == persistedId }
+    }
+
     var filteredJobs: [JobPosting] {
-        var result = jobs
+        var result: [JobPosting]
+
+        // If we have FTS search results, use those (already ranked by relevance)
+        if isUsingFTSSearch {
+            result = ftsSearchResults.map { $0.job.toJobPosting() }
+        } else {
+            result = jobs
+        }
 
         // Filter by job type (intern/FAANG/all)
         switch jobTypeFilter {
@@ -103,28 +126,21 @@ struct ContentView: View {
             result = result.filter { selectedCategories.contains($0.category) }
         }
 
-        // Filter by search text
-        if !searchText.isEmpty {
-            result = result.filter { job in
-                job.company.localizedCaseInsensitiveContains(searchText) ||
-                job.role.localizedCaseInsensitiveContains(searchText) ||
-                job.location.localizedCaseInsensitiveContains(searchText) ||
-                job.country.localizedCaseInsensitiveContains(searchText) ||
-                job.category.localizedCaseInsensitiveContains(searchText)
+        // If using FTS search, results are already sorted by relevance
+        // Otherwise, sort by posted date descending
+        if !isUsingFTSSearch {
+            // Sort by posted date descending (most recent first)
+            // Jobs without dates go to the end
+            result.sort { job1, job2 in
+                let date1 = job1.datePosted ?? ""
+                let date2 = job2.datePosted ?? ""
+                // Empty dates sort to the end
+                if date1.isEmpty && date2.isEmpty { return false }
+                if date1.isEmpty { return false }
+                if date2.isEmpty { return true }
+                // ISO dates (YYYY-MM-DD) sort correctly as strings
+                return date1 > date2
             }
-        }
-
-        // Sort by posted date descending (most recent first)
-        // Jobs without dates go to the end
-        result.sort { job1, job2 in
-            let date1 = job1.datePosted ?? ""
-            let date2 = job2.datePosted ?? ""
-            // Empty dates sort to the end
-            if date1.isEmpty && date2.isEmpty { return false }
-            if date1.isEmpty { return false }
-            if date2.isEmpty { return true }
-            // ISO dates (YYYY-MM-DD) sort correctly as strings
-            return date1 > date2
         }
 
         return result
@@ -137,6 +153,7 @@ struct ContentView: View {
 
             // Inspector sidebar (conditional)
             if let job = selectedJob, job.hasDetails {
+                let highlight = ftsHighlight(for: job)
                 JobInspectorView(
                     job: job,
                     analysis: selectedJobAnalysis,
@@ -156,7 +173,9 @@ struct ContentView: View {
                                 }
                             }
                         }
-                    }
+                    },
+                    highlightedSummary: highlight?.highlightedSummary,
+                    highlightedTechnologies: highlight?.highlightedTechnologies
                 )
             }
         }
@@ -270,6 +289,23 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                     TextField("Search jobs...", text: $searchText)
                         .textFieldStyle(.plain)
+                        .onChange(of: searchText) { _, newValue in
+                            performDebouncedSearch(query: newValue)
+                        }
+                    if isSearching {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                            ftsSearchResults = []
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(8)
                 .background(Color.gray.opacity(0.1))
@@ -369,6 +405,9 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                             .foregroundStyle(job.userStatus == .applied ? .green : .blue)
                             .underline()
+                        } else if let highlight = ftsHighlight(for: job) {
+                            HighlightText(highlight.highlightedCompany)
+                                .foregroundStyle(jobRowColor(job))
                         } else {
                             Text(job.company)
                                 .foregroundStyle(jobRowColor(job))
@@ -376,13 +415,23 @@ struct ContentView: View {
                     }
                     .width(min: 100, ideal: 150)
                     TableColumn("Role") { job in
-                        Text(job.role)
-                            .foregroundStyle(jobRowColor(job))
+                        if let highlight = ftsHighlight(for: job) {
+                            HighlightText(highlight.highlightedRole)
+                                .foregroundStyle(jobRowColor(job))
+                        } else {
+                            Text(job.role)
+                                .foregroundStyle(jobRowColor(job))
+                        }
                     }
                     .width(min: 150, ideal: 250)
                     TableColumn("Location") { job in
-                        Text(job.location)
-                            .foregroundStyle(jobRowColor(job))
+                        if let highlight = ftsHighlight(for: job) {
+                            HighlightText(highlight.highlightedLocation)
+                                .foregroundStyle(jobRowColor(job))
+                        } else {
+                            Text(job.location)
+                                .foregroundStyle(jobRowColor(job))
+                        }
                     }
                     .width(min: 100, ideal: 150)
                     TableColumn("Country") { job in
@@ -494,6 +543,46 @@ struct ContentView: View {
     }
 
     // MARK: - Methods
+
+    /// Perform debounced FTS search
+    private func performDebouncedSearch(query: String) {
+        // Cancel any pending search
+        searchDebounceTask?.cancel()
+
+        // Clear results if query is empty
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            ftsSearchResults = []
+            return
+        }
+
+        // Debounce by 300ms
+        searchDebounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+
+            // Check if cancelled
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                isSearching = true
+            }
+
+            do {
+                let results = try await repository.searchJobsFTS(query: query)
+
+                await MainActor.run {
+                    ftsSearchResults = results
+                    isSearching = false
+                }
+            } catch {
+                await MainActor.run {
+                    // Fall back to showing all jobs if FTS fails
+                    ftsSearchResults = []
+                    isSearching = false
+                    errorMessage = "Search error: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
 
     private func fetchAndParse() {
         fetchFromURL(urlText)

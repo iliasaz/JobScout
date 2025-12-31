@@ -16,6 +16,17 @@ struct SaveResult: Sendable {
     let updatedCount: Int
 }
 
+/// Result of an FTS search with highlighted text
+struct FTSSearchResult: Sendable {
+    let job: PersistedJobPosting
+    let highlightedCompany: String
+    let highlightedRole: String
+    let highlightedSummary: String
+    let highlightedTechnologies: String
+    let highlightedLocation: String
+    let rank: Double
+}
+
 /// Repository for managing job postings and related data
 actor JobRepository {
     private let dbManager: DatabaseManager
@@ -337,7 +348,7 @@ actor JobRepository {
         }
     }
 
-    /// Search jobs by company or role
+    /// Search jobs by company or role (legacy LIKE-based search)
     func searchJobs(query: String) async throws -> [PersistedJobPosting] {
         let db = try await dbManager.getDatabase()
         let searchPattern = "%\(query)%"
@@ -351,6 +362,74 @@ actor JobRepository {
                 """, arguments: [searchPattern, searchPattern])
             return rows.map { Self.jobPosting(from: $0) }
         }
+    }
+
+    /// Full-text search using FTS5 with BM25 ranking and highlighting
+    /// Searches across company, role, summary, technologies, salary, notes, and location
+    func searchJobsFTS(query: String) async throws -> [FTSSearchResult] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return []
+        }
+
+        let db = try await dbManager.getDatabase()
+
+        // Sanitize query by quoting each term to prevent FTS syntax injection
+        let sanitizedQuery = Self.sanitizeFTSQuery(query)
+
+        return try await db.read { db in
+            // Use BM25 for ranking with column weights:
+            // job_id=0 (UNINDEXED), company=10, role=10, summary=5, technologies=8, salary=3, notes=2, location=2
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT
+                    jp.*,
+                    ujs.status as user_status,
+                    ujs.status_changed_at,
+                    jda.salary_min,
+                    jda.salary_max,
+                    jda.salary_currency,
+                    jda.salary_period,
+                    bm25(job_fts, 0, 10, 10, 5, 8, 3, 2, 2) as rank,
+                    highlight(job_fts, 1, '**', '**') as hl_company,
+                    highlight(job_fts, 2, '**', '**') as hl_role,
+                    snippet(job_fts, 3, '**', '**', '...', 40) as hl_summary,
+                    highlight(job_fts, 4, '**', '**') as hl_technologies,
+                    highlight(job_fts, 7, '**', '**') as hl_location
+                FROM job_fts
+                INNER JOIN job_postings jp ON job_fts.job_id = jp.id
+                LEFT JOIN user_job_status ujs ON jp.id = ujs.job_id
+                LEFT JOIN job_description_analysis jda ON jp.id = jda.job_id
+                WHERE job_fts MATCH ?
+                ORDER BY rank
+                """, arguments: [sanitizedQuery])
+
+            return rows.map { row in
+                FTSSearchResult(
+                    job: Self.jobPosting(from: row),
+                    highlightedCompany: row["hl_company"] ?? row["company"] ?? "",
+                    highlightedRole: row["hl_role"] ?? row["role"] ?? "",
+                    highlightedSummary: row["hl_summary"] ?? "",
+                    highlightedTechnologies: row["hl_technologies"] ?? "",
+                    highlightedLocation: row["hl_location"] ?? row["location"] ?? "",
+                    rank: row["rank"] ?? 0.0
+                )
+            }
+        }
+    }
+
+    /// Sanitize FTS query by quoting each term to prevent syntax errors
+    private static func sanitizeFTSQuery(_ query: String) -> String {
+        // Split by whitespace and quote each non-empty term
+        let terms = query.split(whereSeparator: { $0.isWhitespace })
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+
+        // For single term, just quote it
+        if terms.count == 1 {
+            return "\"\(terms[0])\""
+        }
+
+        // For multiple terms, quote each and join with space (implicit AND)
+        return terms.map { "\"\($0)\"" }.joined(separator: " ")
     }
 
     /// Get total job count

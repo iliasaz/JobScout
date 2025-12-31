@@ -28,6 +28,14 @@ JobScout fetches job listings from GitHub README files (like SimplifyJobs and Jo
 - Filter by status: All, New Only, Applied, Ignored, Exclude Applied/Ignored
 - Filter by job type: All, Intern, Non-Intern, FAANG
 
+### Full-Text Search
+- Powered by SQLite FTS5 with trigram tokenizer for substring matching
+- Searches across all job fields: company, role, summary, technologies, salary, location
+- BM25 ranking for relevance-based results (company/role weighted highest)
+- Keyword highlighting in search results and job details panel
+- Debounced search for responsive performance
+- Automatic index synchronization via database triggers
+
 ### User Interface
 - Clean, native macOS interface built with SwiftUI
 - Sortable table with company, role, location, category, and dates
@@ -35,6 +43,7 @@ JobScout fetches job listings from GitHub README files (like SimplifyJobs and Jo
 - Quick access to apply links (both company and aggregator)
 - URL history dropdown for quick access to saved sources
 - Category filter chips for quick filtering
+- Inspector panel showing job details with search highlighting
 
 ### Persistence
 - SQLite database for storing job postings

@@ -349,6 +349,151 @@ actor DatabaseManager {
                 """)
         }
 
+        // Migration 9: Add FTS5 full-text search index
+        migrator.registerMigration("009_AddFTSIndex") { db in
+            // Create FTS5 virtual table for full-text search
+            // Using trigram tokenizer for substring matching
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE IF NOT EXISTS "job_fts" USING fts5(
+                    job_id UNINDEXED,
+                    company,
+                    role,
+                    summary,
+                    technologies,
+                    salary,
+                    notes,
+                    location,
+                    tokenize='trigram'
+                )
+                """)
+
+            // Populate FTS index from existing data
+            try db.execute(sql: """
+                INSERT INTO job_fts (job_id, company, role, summary, technologies, salary, notes, location)
+                SELECT
+                    jp.id,
+                    jp.company,
+                    jp.role,
+                    COALESCE(jda.job_summary, ''),
+                    COALESCE((
+                        SELECT GROUP_CONCAT(technology, ' ')
+                        FROM job_technologies jt
+                        WHERE jt.job_id = jp.id
+                    ), ''),
+                    CASE
+                        WHEN jda.salary_min IS NOT NULL AND jda.salary_max IS NOT NULL
+                        THEN jda.salary_min || '-' || jda.salary_max || ' ' || COALESCE(jda.salary_currency, 'USD')
+                        WHEN jda.salary_min IS NOT NULL
+                        THEN jda.salary_min || ' ' || COALESCE(jda.salary_currency, 'USD')
+                        WHEN jda.salary_max IS NOT NULL
+                        THEN jda.salary_max || ' ' || COALESCE(jda.salary_currency, 'USD')
+                        ELSE ''
+                    END,
+                    COALESCE(jp.notes, ''),
+                    jp.location
+                FROM job_postings jp
+                LEFT JOIN job_description_analysis jda ON jp.id = jda.job_id
+                """)
+
+            // Create triggers to keep FTS index in sync
+
+            // Trigger: After INSERT on job_postings
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_insert AFTER INSERT ON job_postings
+                BEGIN
+                    INSERT INTO job_fts (job_id, company, role, summary, technologies, salary, notes, location)
+                    VALUES (NEW.id, NEW.company, NEW.role, '', '', '', COALESCE(NEW.notes, ''), NEW.location);
+                END
+                """)
+
+            // Trigger: After UPDATE on job_postings
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_update AFTER UPDATE OF company, role, notes, location ON job_postings
+                BEGIN
+                    UPDATE job_fts SET
+                        company = NEW.company,
+                        role = NEW.role,
+                        notes = COALESCE(NEW.notes, ''),
+                        location = NEW.location
+                    WHERE job_id = NEW.id;
+                END
+                """)
+
+            // Trigger: After DELETE on job_postings
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_delete AFTER DELETE ON job_postings
+                BEGIN
+                    DELETE FROM job_fts WHERE job_id = OLD.id;
+                END
+                """)
+
+            // Trigger: After INSERT on job_description_analysis (for summary and salary)
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_analysis_insert AFTER INSERT ON job_description_analysis
+                BEGIN
+                    UPDATE job_fts SET
+                        summary = COALESCE(NEW.job_summary, ''),
+                        salary = CASE
+                            WHEN NEW.salary_min IS NOT NULL AND NEW.salary_max IS NOT NULL
+                            THEN NEW.salary_min || '-' || NEW.salary_max || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            WHEN NEW.salary_min IS NOT NULL
+                            THEN NEW.salary_min || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            WHEN NEW.salary_max IS NOT NULL
+                            THEN NEW.salary_max || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            ELSE ''
+                        END
+                    WHERE job_id = NEW.job_id;
+                END
+                """)
+
+            // Trigger: After UPDATE on job_description_analysis
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_analysis_update AFTER UPDATE ON job_description_analysis
+                BEGIN
+                    UPDATE job_fts SET
+                        summary = COALESCE(NEW.job_summary, ''),
+                        salary = CASE
+                            WHEN NEW.salary_min IS NOT NULL AND NEW.salary_max IS NOT NULL
+                            THEN NEW.salary_min || '-' || NEW.salary_max || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            WHEN NEW.salary_min IS NOT NULL
+                            THEN NEW.salary_min || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            WHEN NEW.salary_max IS NOT NULL
+                            THEN NEW.salary_max || ' ' || COALESCE(NEW.salary_currency, 'USD')
+                            ELSE ''
+                        END
+                    WHERE job_id = NEW.job_id;
+                END
+                """)
+
+            // Trigger: After INSERT on job_technologies
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_tech_insert AFTER INSERT ON job_technologies
+                BEGIN
+                    UPDATE job_fts SET
+                        technologies = COALESCE((
+                            SELECT GROUP_CONCAT(technology, ' ')
+                            FROM job_technologies
+                            WHERE job_id = NEW.job_id
+                        ), '')
+                    WHERE job_id = NEW.job_id;
+                END
+                """)
+
+            // Trigger: After DELETE on job_technologies
+            try db.execute(sql: """
+                CREATE TRIGGER IF NOT EXISTS job_fts_tech_delete AFTER DELETE ON job_technologies
+                BEGIN
+                    UPDATE job_fts SET
+                        technologies = COALESCE((
+                            SELECT GROUP_CONCAT(technology, ' ')
+                            FROM job_technologies
+                            WHERE job_id = OLD.job_id
+                        ), '')
+                    WHERE job_id = OLD.job_id;
+                END
+                """)
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

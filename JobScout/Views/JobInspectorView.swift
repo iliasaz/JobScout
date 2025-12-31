@@ -15,6 +15,10 @@ struct JobInspectorView: View {
     let onClose: () -> Void
     let onApplyClick: (URL) -> Void
 
+    // Optional FTS highlighting
+    var highlightedSummary: String?
+    var highlightedTechnologies: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -47,9 +51,14 @@ struct JobInspectorView: View {
                     // Summary section
                     if let summary = analysis?.summary, !summary.isEmpty {
                         SectionView(title: "Summary") {
-                            Text(summary)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+                            if let highlighted = highlightedSummary, !highlighted.isEmpty {
+                                HighlightText(highlighted, font: .callout)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(summary)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -90,7 +99,10 @@ struct JobInspectorView: View {
                     // Technologies section
                     if !technologies.isEmpty {
                         SectionView(title: "Technologies") {
-                            TechnologiesGridView(technologies: technologies)
+                            TechnologiesGridView(
+                                technologies: technologies,
+                                highlightedTechnologies: highlightedTechnologies
+                            )
                         }
                     }
 
@@ -205,6 +217,40 @@ private struct SectionView<Content: View>: View {
 
 private struct TechnologiesGridView: View {
     let technologies: [JobTechnology]
+    var highlightedTechnologies: String?
+
+    // Parse highlighted technologies to get list of terms to highlight
+    private var highlightedTerms: Set<String> {
+        guard let highlighted = highlightedTechnologies else { return [] }
+        // Extract text between ** markers
+        var terms = Set<String>()
+        var current = highlighted.startIndex
+        while current < highlighted.endIndex {
+            if let openRange = highlighted.range(of: "**", range: current..<highlighted.endIndex),
+               openRange.upperBound < highlighted.endIndex,
+               let closeRange = highlighted.range(of: "**", range: openRange.upperBound..<highlighted.endIndex) {
+                let term = String(highlighted[openRange.upperBound..<closeRange.lowerBound])
+                    .lowercased()
+                    .trimmingCharacters(in: .whitespaces)
+                if !term.isEmpty {
+                    terms.insert(term)
+                }
+                current = closeRange.upperBound
+            } else {
+                break
+            }
+        }
+        return terms
+    }
+
+    // Check if a technology should be highlighted
+    private func isHighlighted(_ tech: JobTechnology) -> Bool {
+        guard !highlightedTerms.isEmpty else { return false }
+        let techName = tech.technology.lowercased()
+        return highlightedTerms.contains { term in
+            techName.contains(term) || term.contains(techName)
+        }
+    }
 
     // Group technologies by category
     var groupedTechnologies: [(String, [JobTechnology])] {
@@ -222,7 +268,7 @@ private struct TechnologiesGridView: View {
 
                     FlowLayout(spacing: 4) {
                         ForEach(techs) { tech in
-                            TechBadge(technology: tech)
+                            TechBadge(technology: tech, isHighlighted: isHighlighted(tech))
                         }
                     }
                 }
@@ -235,6 +281,7 @@ private struct TechnologiesGridView: View {
 
 private struct TechBadge: View {
     let technology: JobTechnology
+    var isHighlighted: Bool = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -245,12 +292,17 @@ private struct TechBadge: View {
             }
             Text(technology.technology)
                 .font(.caption)
+                .fontWeight(isHighlighted ? .bold : .regular)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(badgeColor.opacity(0.15))
+        .background(isHighlighted ? Color.yellow.opacity(0.4) : badgeColor.opacity(0.15))
         .foregroundStyle(badgeColor)
         .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isHighlighted ? Color.yellow : Color.clear, lineWidth: 2)
+        )
     }
 
     var badgeColor: Color {
