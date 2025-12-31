@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="briefcaseGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#E5E7EB"/>
+    </linearGradient>
+    <linearGradient id="glassGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA"/>
+      <stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="url(#bgGradient)"/>
+
+  <!-- Subtle inner shadow/highlight -->
+  <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+
+  <!-- Briefcase body -->
+  <rect x="200" y="380" width="450" height="340" rx="40" ry="40" fill="url(#briefcaseGradient)"/>
+
+  <!-- Briefcase handle -->
+  <path d="M340 380 L340 320 Q340 280 380 280 L470 280 Q510 280 510 320 L510 380"
+        fill="none" stroke="url(#briefcaseGradient)" stroke-width="50" stroke-linecap="round"/>
+
+  <!-- Briefcase clasp/detail -->
+  <rect x="370" y="500" width="110" height="70" rx="12" fill="#4F46E5" opacity="0.3"/>
+
+  <!-- Magnifying glass circle -->
+  <circle cx="680" cy="420" r="160" fill="none" stroke="url(#glassGradient)" stroke-width="45"/>
+
+  <!-- Magnifying glass inner highlight -->
+  <circle cx="680" cy="420" r="120" fill="rgba(96,165,250,0.15)"/>
+
+  <!-- Magnifying glass handle -->
+  <line x1="790" y1="530" x2="880" y2="620" stroke="url(#glassGradient)" stroke-width="50" stroke-linecap="round"/>
+
+  <!-- Sparkle/radar dots to suggest "scouting" -->
+  <circle cx="640" cy="380" r="15" fill="#FCD34D"/>
+  <circle cx="720" cy="400" r="10" fill="#FCD34D" opacity="0.7"/>
+  <circle cx="660" cy="450" r="8" fill="#FCD34D" opacity="0.5"/>
+
+  <!-- Checkmark inside magnifying glass suggesting "found" -->
+  <path d="M620 420 L660 460 L740 370" fill="none" stroke="#10B981" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

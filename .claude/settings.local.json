@@ -10,7 +10,8 @@
       "Bash(xcrun xcresulttool:*)",
       "Bash(swift -e:*)",
       "Bash(cat:*)",
-      "Bash(swift test:*)"
+      "Bash(swift test:*)",
+      "Bash(git push)"
     ]
   }
 }
