@@ -1,0 +1,715 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		493E1D5E2EFF830C00DEE268 /* html2md in Frameworks */ = {isa = PBXBuildFile; productRef = 493E1D5D2EFF830C00DEE268 /* html2md */; };
+		493E1D612EFF869300DEE268 /* SwiftAgents in Frameworks */ = {isa = PBXBuildFile; productRef = 493E1D602EFF869300DEE268 /* SwiftAgents */; };
+		494FB8422F03118F00DA64E0 /* StructuredQueries in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8412F03118F00DA64E0 /* StructuredQueries */; };
+		494FB8442F03118F00DA64E0 /* StructuredQueriesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8432F03118F00DA64E0 /* StructuredQueriesCore */; };
+		494FB8462F03118F00DA64E0 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8452F03118F00DA64E0 /* StructuredQueriesSQLite */; };
+		494FB8482F03118F00DA64E0 /* StructuredQueriesSQLiteCore in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8472F03118F00DA64E0 /* StructuredQueriesSQLiteCore */; };
+		494FB84A2F03118F00DA64E0 /* StructuredQueriesTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8492F03118F00DA64E0 /* StructuredQueriesTestSupport */; };
+		494FB8742F03164500DA64E0 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8732F03164500DA64E0 /* GRDB */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		493E1D402EFF5EFB00DEE268 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 493E1D2A2EFF5EFA00DEE268 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 493E1D312EFF5EFA00DEE268;
+			remoteInfo = JobScout;
+		};
+		493E1D4A2EFF5EFB00DEE268 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 493E1D2A2EFF5EFA00DEE268 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 493E1D312EFF5EFA00DEE268;
+			remoteInfo = JobScout;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		493E1D322EFF5EFA00DEE268 /* JobScout.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JobScout.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		493E1D3F2EFF5EFB00DEE268 /* JobScoutTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JobScoutTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		493E1D492EFF5EFB00DEE268 /* JobScoutUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JobScoutUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		493E1D342EFF5EFA00DEE268 /* JobScout */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = JobScout;
+			sourceTree = "<group>";
+		};
+		493E1D422EFF5EFB00DEE268 /* JobScoutTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = JobScoutTests;
+			sourceTree = "<group>";
+		};
+		493E1D4C2EFF5EFB00DEE268 /* JobScoutUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = JobScoutUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		493E1D2F2EFF5EFA00DEE268 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				493E1D612EFF869300DEE268 /* SwiftAgents in Frameworks */,
+				494FB8482F03118F00DA64E0 /* StructuredQueriesSQLiteCore in Frameworks */,
+				494FB8442F03118F00DA64E0 /* StructuredQueriesCore in Frameworks */,
+				493E1D5E2EFF830C00DEE268 /* html2md in Frameworks */,
+				494FB8422F03118F00DA64E0 /* StructuredQueries in Frameworks */,
+				494FB8742F03164500DA64E0 /* GRDB in Frameworks */,
+				494FB8462F03118F00DA64E0 /* StructuredQueriesSQLite in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D3C2EFF5EFB00DEE268 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				494FB84A2F03118F00DA64E0 /* StructuredQueriesTestSupport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D462EFF5EFB00DEE268 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		493E1D292EFF5EFA00DEE268 = {
+			isa = PBXGroup;
+			children = (
+				493E1D342EFF5EFA00DEE268 /* JobScout */,
+				493E1D422EFF5EFB00DEE268 /* JobScoutTests */,
+				493E1D4C2EFF5EFB00DEE268 /* JobScoutUITests */,
+				493E1D332EFF5EFA00DEE268 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		493E1D332EFF5EFA00DEE268 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				493E1D322EFF5EFA00DEE268 /* JobScout.app */,
+				493E1D3F2EFF5EFB00DEE268 /* JobScoutTests.xctest */,
+				493E1D492EFF5EFB00DEE268 /* JobScoutUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		493E1D312EFF5EFA00DEE268 /* JobScout */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 493E1D532EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScout" */;
+			buildPhases = (
+				493E1D2E2EFF5EFA00DEE268 /* Sources */,
+				493E1D2F2EFF5EFA00DEE268 /* Frameworks */,
+				493E1D302EFF5EFA00DEE268 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				493E1D342EFF5EFA00DEE268 /* JobScout */,
+			);
+			name = JobScout;
+			packageProductDependencies = (
+				493E1D5D2EFF830C00DEE268 /* html2md */,
+				493E1D602EFF869300DEE268 /* SwiftAgents */,
+				494FB8412F03118F00DA64E0 /* StructuredQueries */,
+				494FB8432F03118F00DA64E0 /* StructuredQueriesCore */,
+				494FB8452F03118F00DA64E0 /* StructuredQueriesSQLite */,
+				494FB8472F03118F00DA64E0 /* StructuredQueriesSQLiteCore */,
+				494FB8732F03164500DA64E0 /* GRDB */,
+			);
+			productName = JobScout;
+			productReference = 493E1D322EFF5EFA00DEE268 /* JobScout.app */;
+			productType = "com.apple.product-type.application";
+		};
+		493E1D3E2EFF5EFB00DEE268 /* JobScoutTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 493E1D562EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScoutTests" */;
+			buildPhases = (
+				493E1D3B2EFF5EFB00DEE268 /* Sources */,
+				493E1D3C2EFF5EFB00DEE268 /* Frameworks */,
+				493E1D3D2EFF5EFB00DEE268 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				493E1D412EFF5EFB00DEE268 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				493E1D422EFF5EFB00DEE268 /* JobScoutTests */,
+			);
+			name = JobScoutTests;
+			packageProductDependencies = (
+				494FB8492F03118F00DA64E0 /* StructuredQueriesTestSupport */,
+			);
+			productName = JobScoutTests;
+			productReference = 493E1D3F2EFF5EFB00DEE268 /* JobScoutTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		493E1D482EFF5EFB00DEE268 /* JobScoutUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 493E1D592EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScoutUITests" */;
+			buildPhases = (
+				493E1D452EFF5EFB00DEE268 /* Sources */,
+				493E1D462EFF5EFB00DEE268 /* Frameworks */,
+				493E1D472EFF5EFB00DEE268 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				493E1D4B2EFF5EFB00DEE268 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				493E1D4C2EFF5EFB00DEE268 /* JobScoutUITests */,
+			);
+			name = JobScoutUITests;
+			packageProductDependencies = (
+			);
+			productName = JobScoutUITests;
+			productReference = 493E1D492EFF5EFB00DEE268 /* JobScoutUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		493E1D2A2EFF5EFA00DEE268 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					493E1D312EFF5EFA00DEE268 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					493E1D3E2EFF5EFB00DEE268 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 493E1D312EFF5EFA00DEE268;
+					};
+					493E1D482EFF5EFB00DEE268 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 493E1D312EFF5EFA00DEE268;
+					};
+				};
+			};
+			buildConfigurationList = 493E1D2D2EFF5EFA00DEE268 /* Build configuration list for PBXProject "JobScout" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 493E1D292EFF5EFA00DEE268;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				493E1D5C2EFF830C00DEE268 /* XCRemoteSwiftPackageReference "html2md" */,
+				493E1D5F2EFF869300DEE268 /* XCRemoteSwiftPackageReference "SwiftAgents" */,
+				494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */,
+				494FB8722F03164500DA64E0 /* XCRemoteSwiftPackageReference "GRDB" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 493E1D332EFF5EFA00DEE268 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				493E1D312EFF5EFA00DEE268 /* JobScout */,
+				493E1D3E2EFF5EFB00DEE268 /* JobScoutTests */,
+				493E1D482EFF5EFB00DEE268 /* JobScoutUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		493E1D302EFF5EFA00DEE268 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D3D2EFF5EFB00DEE268 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D472EFF5EFB00DEE268 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		493E1D2E2EFF5EFA00DEE268 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D3B2EFF5EFB00DEE268 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		493E1D452EFF5EFB00DEE268 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		493E1D412EFF5EFB00DEE268 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 493E1D312EFF5EFA00DEE268 /* JobScout */;
+			targetProxy = 493E1D402EFF5EFB00DEE268 /* PBXContainerItemProxy */;
+		};
+		493E1D4B2EFF5EFB00DEE268 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 493E1D312EFF5EFA00DEE268 /* JobScout */;
+			targetProxy = 493E1D4A2EFF5EFB00DEE268 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		493E1D512EFF5EFB00DEE268 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		493E1D522EFF5EFB00DEE268 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		493E1D542EFF5EFB00DEE268 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScout;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		493E1D552EFF5EFB00DEE268 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScout;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		493E1D572EFF5EFB00DEE268 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScoutTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JobScout.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JobScout";
+			};
+			name = Debug;
+		};
+		493E1D582EFF5EFB00DEE268 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScoutTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JobScout.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JobScout";
+			};
+			name = Release;
+		};
+		493E1D5A2EFF5EFB00DEE268 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScoutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = JobScout;
+			};
+			name = Debug;
+		};
+		493E1D5B2EFF5EFB00DEE268 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6CGNH3LTV7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iliasazonov.JobScoutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = JobScout;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		493E1D2D2EFF5EFA00DEE268 /* Build configuration list for PBXProject "JobScout" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				493E1D512EFF5EFB00DEE268 /* Debug */,
+				493E1D522EFF5EFB00DEE268 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		493E1D532EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScout" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				493E1D542EFF5EFB00DEE268 /* Debug */,
+				493E1D552EFF5EFB00DEE268 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		493E1D562EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScoutTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				493E1D572EFF5EFB00DEE268 /* Debug */,
+				493E1D582EFF5EFB00DEE268 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		493E1D592EFF5EFB00DEE268 /* Build configuration list for PBXNativeTarget "JobScoutUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				493E1D5A2EFF5EFB00DEE268 /* Debug */,
+				493E1D5B2EFF5EFB00DEE268 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		493E1D5C2EFF830C00DEE268 /* XCRemoteSwiftPackageReference "html2md" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:tim-gromeyer/html2md.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		493E1D5F2EFF869300DEE268 /* XCRemoteSwiftPackageReference "SwiftAgents" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:iliasaz/SwiftAgents.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-structured-queries";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.26.0;
+			};
+		};
+		494FB8722F03164500DA64E0 /* XCRemoteSwiftPackageReference "GRDB" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		493E1D5D2EFF830C00DEE268 /* html2md */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 493E1D5C2EFF830C00DEE268 /* XCRemoteSwiftPackageReference "html2md" */;
+			productName = html2md;
+		};
+		493E1D602EFF869300DEE268 /* SwiftAgents */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 493E1D5F2EFF869300DEE268 /* XCRemoteSwiftPackageReference "SwiftAgents" */;
+			productName = SwiftAgents;
+		};
+		494FB8412F03118F00DA64E0 /* StructuredQueries */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueries;
+		};
+		494FB8432F03118F00DA64E0 /* StructuredQueriesCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesCore;
+		};
+		494FB8452F03118F00DA64E0 /* StructuredQueriesSQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesSQLite;
+		};
+		494FB8472F03118F00DA64E0 /* StructuredQueriesSQLiteCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesSQLiteCore;
+		};
+		494FB8492F03118F00DA64E0 /* StructuredQueriesTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesTestSupport;
+		};
+		494FB8732F03164500DA64E0 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494FB8722F03164500DA64E0 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 493E1D2A2EFF5EFA00DEE268 /* Project object */;
+}
