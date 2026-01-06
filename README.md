@@ -2,6 +2,10 @@
 
 A macOS app for aggregating and tracking job postings from GitHub-based job boards.
 
+<p align="center">
+  <img src="app-screenshot-01.png" alt="JobScout Screenshot" width="800">
+</p>
+
 ## Overview
 
 JobScout fetches job listings from GitHub README files (like SimplifyJobs and Jobright repositories), parses the markdown tables, and provides a unified interface for browsing, filtering, and tracking your job application progress.
