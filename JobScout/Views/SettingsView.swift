@@ -24,9 +24,12 @@ struct SettingsView: View {
     @State private var currentResume: UserResume?
     @State private var resumeUploadStatus: ResumeUploadStatus = .idle
     @State private var isLoadingResume = true
+    @State private var chunkCount: Int = 0
+    @State private var isExtracting = false
 
     private let keychainService = KeychainService.shared
     private let resumeRepository = ResumeRepository.shared
+    private let resumeTextService = ResumeTextService.shared
 
     /// Maximum allowed resume file size (10 MB)
     private let maxResumeFileSize = 10 * 1024 * 1024
@@ -215,19 +218,61 @@ struct SettingsView: View {
                             Button(action: selectResumeFile) {
                                 Text("Replace")
                             }
-                            .disabled(resumeUploadStatus == .uploading)
+                            .disabled(resumeUploadStatus == .uploading || isExtracting)
 
                             Button(action: deleteResume) {
                                 Image(systemName: "trash")
                                     .foregroundStyle(.red)
                             }
                             .buttonStyle(.borderless)
-                            .disabled(resumeUploadStatus == .uploading)
+                            .disabled(resumeUploadStatus == .uploading || isExtracting)
                         }
 
                         Text("Uploaded: \(resume.uploadedAt.formatted(date: .abbreviated, time: .shortened))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        // Extraction status
+                        HStack(spacing: 4) {
+                            switch resume.extractionStatus {
+                            case .pending:
+                                Image(systemName: "clock")
+                                    .foregroundStyle(.orange)
+                                Text("Text extraction pending")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            case .processing:
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Extracting text...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            case .completed:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Text extracted • \(chunkCount) chunks")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            case .failed:
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.red)
+                                Text(resume.extractionError ?? "Extraction failed")
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+
+                        // Retry button if extraction failed
+                        if resume.extractionStatus == .failed || resume.extractionStatus == .pending {
+                            Button(action: { extractTextFromResume(resume) }) {
+                                HStack {
+                                    Image(systemName: "arrow.clockwise")
+                                    Text(resume.extractionStatus == .failed ? "Retry Extraction" : "Extract Text")
+                                }
+                                .font(.caption)
+                            }
+                            .disabled(isExtracting)
+                        }
                     }
                 } else {
                     // No resume uploaded yet
@@ -364,9 +409,16 @@ struct SettingsView: View {
         Task {
             do {
                 let resume = try await resumeRepository.getCurrentResume()
+                let count = try await resumeRepository.getChunkCount()
                 await MainActor.run {
                     currentResume = resume
+                    chunkCount = count
                     isLoadingResume = false
+                }
+
+                // Auto-extract if pending and not already extracted
+                if let resume = resume, resume.extractionStatus == .pending {
+                    extractTextFromResume(resume)
                 }
             } catch {
                 await MainActor.run {
@@ -423,6 +475,7 @@ struct SettingsView: View {
 
                 await MainActor.run {
                     currentResume = savedResume
+                    chunkCount = 0
                     resumeUploadStatus = .success
                 }
 
@@ -432,6 +485,9 @@ struct SettingsView: View {
                 await MainActor.run {
                     resumeUploadStatus = .idle
                 }
+
+                // Trigger text extraction
+                extractTextFromResume(savedResume)
             } catch {
                 await MainActor.run {
                     resumeUploadStatus = .error(error.localizedDescription)
@@ -446,10 +502,72 @@ struct SettingsView: View {
                 try await resumeRepository.deleteResume()
                 await MainActor.run {
                     currentResume = nil
+                    chunkCount = 0
                 }
             } catch {
                 await MainActor.run {
                     resumeUploadStatus = .error("Failed to delete resume: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func extractTextFromResume(_ resume: UserResume) {
+        guard !isExtracting else { return }
+
+        Task {
+            await MainActor.run {
+                isExtracting = true
+            }
+
+            // Update status to processing
+            try? await resumeRepository.updateExtractionStatus(resumeId: resume.id, status: .processing)
+
+            // Refresh the view to show processing status
+            if let updatedResume = try? await resumeRepository.getCurrentResume() {
+                await MainActor.run {
+                    currentResume = updatedResume
+                }
+            }
+
+            do {
+                // Extract text and create chunks
+                let (text, chunks) = try await resumeTextService.extractAndChunk(from: resume.pdfData)
+
+                // Save to database
+                try await resumeRepository.saveExtractedTextAndChunks(
+                    resumeId: resume.id,
+                    text: text,
+                    chunks: chunks
+                )
+
+                // Refresh the view
+                let updatedResume = try await resumeRepository.getCurrentResume()
+                let count = try await resumeRepository.getChunkCount()
+
+                await MainActor.run {
+                    currentResume = updatedResume
+                    chunkCount = count
+                    isExtracting = false
+                }
+            } catch {
+                // Update status to failed
+                try? await resumeRepository.updateExtractionStatus(
+                    resumeId: resume.id,
+                    status: .failed,
+                    error: error.localizedDescription
+                )
+
+                // Refresh the view
+                if let updatedResume = try? await resumeRepository.getCurrentResume() {
+                    await MainActor.run {
+                        currentResume = updatedResume
+                        isExtracting = false
+                    }
+                } else {
+                    await MainActor.run {
+                        isExtracting = false
+                    }
                 }
             }
         }

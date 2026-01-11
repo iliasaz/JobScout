@@ -509,6 +509,53 @@ actor DatabaseManager {
                 """)
         }
 
+        // Migration 11: Add extracted_text column to user_resume table
+        migrator.registerMigration("011_AddResumeExtractedText") { db in
+            // Check if column already exists
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(user_resume)")
+            let columnNames = columns.map { $0["name"] as String }
+
+            if !columnNames.contains("extracted_text") {
+                try db.execute(sql: """
+                    ALTER TABLE user_resume ADD COLUMN "extracted_text" TEXT
+                    """)
+            }
+
+            if !columnNames.contains("extraction_status") {
+                try db.execute(sql: """
+                    ALTER TABLE user_resume ADD COLUMN "extraction_status" TEXT DEFAULT 'pending'
+                    """)
+            }
+
+            if !columnNames.contains("extraction_error") {
+                try db.execute(sql: """
+                    ALTER TABLE user_resume ADD COLUMN "extraction_error" TEXT
+                    """)
+            }
+        }
+
+        // Migration 12: Add resume_chunks table for storing chunked text
+        migrator.registerMigration("012_AddResumeChunks") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS "resume_chunks" (
+                    "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "resume_id" INTEGER NOT NULL,
+                    "chunk_index" INTEGER NOT NULL,
+                    "content" TEXT NOT NULL,
+                    "character_count" INTEGER NOT NULL,
+                    "word_count" INTEGER NOT NULL,
+                    "created_at" TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (resume_id) REFERENCES user_resume(id) ON DELETE CASCADE,
+                    UNIQUE(resume_id, chunk_index)
+                )
+                """)
+
+            // Create index for efficient chunk retrieval
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS idx_resume_chunks_resume_id ON resume_chunks(resume_id)
+                """)
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

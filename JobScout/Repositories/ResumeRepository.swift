@@ -18,6 +18,8 @@ actor ResumeRepository {
         self.dbManager = dbManager
     }
 
+    // MARK: - Resume CRUD Operations
+
     /// Get the current resume if one exists
     /// Only one resume is stored at a time (the most recent one)
     func getCurrentResume() async throws -> UserResume? {
@@ -43,13 +45,16 @@ actor ResumeRepository {
         let db = try await dbManager.getDatabase()
 
         return try await db.write { db in
+            // Delete any existing chunks first (foreign key constraint)
+            try db.execute(sql: "DELETE FROM resume_chunks")
+
             // Delete any existing resume (we only keep one)
             try db.execute(sql: "DELETE FROM user_resume")
 
-            // Insert the new resume
+            // Insert the new resume with pending extraction status
             try db.execute(sql: """
-                INSERT INTO user_resume (file_name, pdf_data, file_size, uploaded_at, created_at, updated_at)
-                VALUES (?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
+                INSERT INTO user_resume (file_name, pdf_data, file_size, extraction_status, uploaded_at, created_at, updated_at)
+                VALUES (?, ?, ?, 'pending', datetime('now'), datetime('now'), datetime('now'))
                 """, arguments: [fileName, pdfData, pdfData.count])
 
             let id = db.lastInsertedRowID
@@ -74,11 +79,13 @@ actor ResumeRepository {
         return try await saveResume(fileName: fileName, pdfData: pdfData)
     }
 
-    /// Delete the current resume
+    /// Delete the current resume and its chunks
     func deleteResume() async throws {
         let db = try await dbManager.getDatabase()
 
         try await db.write { db in
+            // Delete chunks first (foreign key constraint)
+            try db.execute(sql: "DELETE FROM resume_chunks")
             try db.execute(sql: "DELETE FROM user_resume")
         }
     }
@@ -90,6 +97,172 @@ actor ResumeRepository {
         return try await db.read { db in
             let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM user_resume") ?? 0
             return count > 0
+        }
+    }
+
+    // MARK: - Text Extraction Operations
+
+    /// Update the extraction status for a resume
+    func updateExtractionStatus(resumeId: Int, status: ExtractionStatus, error: String? = nil) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            if let error = error {
+                try db.execute(sql: """
+                    UPDATE user_resume SET
+                        extraction_status = ?,
+                        extraction_error = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """, arguments: [status.rawValue, error, resumeId])
+            } else {
+                try db.execute(sql: """
+                    UPDATE user_resume SET
+                        extraction_status = ?,
+                        extraction_error = NULL,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """, arguments: [status.rawValue, resumeId])
+            }
+        }
+    }
+
+    /// Save extracted text for a resume
+    func saveExtractedText(resumeId: Int, text: String) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            try db.execute(sql: """
+                UPDATE user_resume SET
+                    extracted_text = ?,
+                    extraction_status = 'completed',
+                    extraction_error = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """, arguments: [text, resumeId])
+        }
+    }
+
+    /// Get the extracted text for the current resume
+    func getExtractedText() async throws -> String? {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            try String.fetchOne(db, sql: """
+                SELECT extracted_text FROM user_resume ORDER BY uploaded_at DESC LIMIT 1
+                """)
+        }
+    }
+
+    // MARK: - Chunk Operations
+
+    /// Save chunks for a resume, replacing any existing chunks
+    func saveChunks(resumeId: Int, chunks: [TextChunk]) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            // Delete existing chunks for this resume
+            try db.execute(sql: "DELETE FROM resume_chunks WHERE resume_id = ?", arguments: [resumeId])
+
+            // Insert new chunks
+            for chunk in chunks {
+                try db.execute(sql: """
+                    INSERT INTO resume_chunks (resume_id, chunk_index, content, character_count, word_count, created_at)
+                    VALUES (?, ?, ?, ?, ?, datetime('now'))
+                    """, arguments: [
+                        resumeId,
+                        chunk.index,
+                        chunk.content,
+                        chunk.characterCount,
+                        chunk.wordCount
+                    ])
+            }
+        }
+    }
+
+    /// Get all chunks for the current resume
+    func getChunks() async throws -> [ResumeChunk] {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            // First get the current resume ID
+            guard let resumeId = try Int.fetchOne(db, sql: """
+                SELECT id FROM user_resume ORDER BY uploaded_at DESC LIMIT 1
+                """) else {
+                return []
+            }
+
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM resume_chunks WHERE resume_id = ? ORDER BY chunk_index ASC
+                """, arguments: [resumeId])
+
+            return rows.map { ResumeChunk.from(row: $0) }
+        }
+    }
+
+    /// Get chunks for a specific resume
+    func getChunks(forResumeId resumeId: Int) async throws -> [ResumeChunk] {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM resume_chunks WHERE resume_id = ? ORDER BY chunk_index ASC
+                """, arguments: [resumeId])
+
+            return rows.map { ResumeChunk.from(row: $0) }
+        }
+    }
+
+    /// Get the count of chunks for the current resume
+    func getChunkCount() async throws -> Int {
+        let db = try await dbManager.getDatabase()
+
+        return try await db.read { db in
+            guard let resumeId = try Int.fetchOne(db, sql: """
+                SELECT id FROM user_resume ORDER BY uploaded_at DESC LIMIT 1
+                """) else {
+                return 0
+            }
+
+            return try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM resume_chunks WHERE resume_id = ?
+                """, arguments: [resumeId]) ?? 0
+        }
+    }
+
+    // MARK: - Combined Operations
+
+    /// Save extracted text and chunks in a single transaction
+    func saveExtractedTextAndChunks(resumeId: Int, text: String, chunks: [TextChunk]) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            // Update resume with extracted text
+            try db.execute(sql: """
+                UPDATE user_resume SET
+                    extracted_text = ?,
+                    extraction_status = 'completed',
+                    extraction_error = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """, arguments: [text, resumeId])
+
+            // Delete existing chunks
+            try db.execute(sql: "DELETE FROM resume_chunks WHERE resume_id = ?", arguments: [resumeId])
+
+            // Insert new chunks
+            for chunk in chunks {
+                try db.execute(sql: """
+                    INSERT INTO resume_chunks (resume_id, chunk_index, content, character_count, word_count, created_at)
+                    VALUES (?, ?, ?, ?, ?, datetime('now'))
+                    """, arguments: [
+                        resumeId,
+                        chunk.index,
+                        chunk.content,
+                        chunk.characterCount,
+                        chunk.wordCount
+                    ])
+            }
         }
     }
 }
