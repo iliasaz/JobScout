@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 /// Settings view for configuring API keys and app preferences
 struct SettingsView: View {
@@ -18,7 +20,23 @@ struct SettingsView: View {
     @State private var enableAnalysis = true
     @State private var maxParallelAnalysis: Int = 3
 
+    // Resume upload state
+    @State private var currentResume: UserResume?
+    @State private var resumeUploadStatus: ResumeUploadStatus = .idle
+    @State private var isLoadingResume = true
+
     private let keychainService = KeychainService.shared
+    private let resumeRepository = ResumeRepository.shared
+
+    /// Maximum allowed resume file size (10 MB)
+    private let maxResumeFileSize = 10 * 1024 * 1024
+
+    enum ResumeUploadStatus: Equatable {
+        case idle
+        case uploading
+        case success
+        case error(String)
+    }
 
     /// Key for storing max rows setting in UserDefaults
     static let maxRowsKey = "maxRowsToIngest"
@@ -171,11 +189,107 @@ struct SettingsView: View {
             } footer: {
                 Text("Set to 0 for no limit. Useful for testing with large job lists.")
             }
+
+            Section {
+                if isLoadingResume {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Loading...")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let resume = currentResume {
+                    // Display current resume info
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "doc.fill")
+                                .foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(resume.fileName)
+                                    .fontWeight(.medium)
+                                Text(resume.formattedFileSize)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button(action: selectResumeFile) {
+                                Text("Replace")
+                            }
+                            .disabled(resumeUploadStatus == .uploading)
+
+                            Button(action: deleteResume) {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(resumeUploadStatus == .uploading)
+                        }
+
+                        Text("Uploaded: \(resume.uploadedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    // No resume uploaded yet
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("No resume uploaded")
+                                .foregroundStyle(.secondary)
+                            Text("Upload a PDF file to use with job applications")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(action: selectResumeFile) {
+                            HStack {
+                                Image(systemName: "arrow.up.doc")
+                                Text("Upload PDF")
+                            }
+                        }
+                        .disabled(resumeUploadStatus == .uploading)
+                    }
+                }
+
+                if resumeUploadStatus == .uploading {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Uploading...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if case .success = resumeUploadStatus {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("Resume uploaded successfully")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                }
+
+                if case .error(let message) = resumeUploadStatus {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("Resume")
+            } footer: {
+                Text("Your resume is stored locally and can be used when applying to jobs. Maximum file size: 10 MB.")
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 550)
+        .frame(width: 450, height: 700)
         .onAppear {
             loadSettings()
+            loadResume()
         }
     }
 
@@ -239,6 +353,103 @@ struct SettingsView: View {
             } catch {
                 await MainActor.run {
                     saveStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    // MARK: - Resume Methods
+
+    private func loadResume() {
+        Task {
+            do {
+                let resume = try await resumeRepository.getCurrentResume()
+                await MainActor.run {
+                    currentResume = resume
+                    isLoadingResume = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingResume = false
+                }
+            }
+        }
+    }
+
+    private func selectResumeFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.pdf]
+        panel.message = "Select a PDF resume to upload"
+        panel.prompt = "Upload"
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                uploadResume(from: url)
+            }
+        }
+    }
+
+    private func uploadResume(from url: URL) {
+        resumeUploadStatus = .uploading
+
+        Task {
+            do {
+                // Read the file data
+                let data = try Data(contentsOf: url)
+
+                // Check file size
+                guard data.count <= maxResumeFileSize else {
+                    await MainActor.run {
+                        resumeUploadStatus = .error("File is too large. Maximum size is 10 MB.")
+                    }
+                    return
+                }
+
+                // Validate it's a PDF
+                guard data.starts(with: [0x25, 0x50, 0x44, 0x46]) else { // %PDF magic bytes
+                    await MainActor.run {
+                        resumeUploadStatus = .error("The selected file is not a valid PDF.")
+                    }
+                    return
+                }
+
+                let fileName = url.lastPathComponent
+
+                // Save to database
+                let savedResume = try await resumeRepository.saveResume(fileName: fileName, pdfData: data)
+
+                await MainActor.run {
+                    currentResume = savedResume
+                    resumeUploadStatus = .success
+                }
+
+                // Reset success status after delay
+                try? await Task.sleep(for: .seconds(2))
+
+                await MainActor.run {
+                    resumeUploadStatus = .idle
+                }
+            } catch {
+                await MainActor.run {
+                    resumeUploadStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func deleteResume() {
+        Task {
+            do {
+                try await resumeRepository.deleteResume()
+                await MainActor.run {
+                    currentResume = nil
+                }
+            } catch {
+                await MainActor.run {
+                    resumeUploadStatus = .error("Failed to delete resume: \(error.localizedDescription)")
                 }
             }
         }

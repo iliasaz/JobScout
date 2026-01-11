@@ -494,6 +494,21 @@ actor DatabaseManager {
                 """)
         }
 
+        // Migration 10: Add user_resume table for storing uploaded resume PDFs
+        migrator.registerMigration("010_AddUserResume") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS "user_resume" (
+                    "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "file_name" TEXT NOT NULL,
+                    "pdf_data" BLOB NOT NULL,
+                    "file_size" INTEGER NOT NULL,
+                    "uploaded_at" TEXT NOT NULL DEFAULT (datetime('now')),
+                    "created_at" TEXT NOT NULL DEFAULT (datetime('now')),
+                    "updated_at" TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+                """)
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }
