@@ -640,7 +640,7 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		493E1D5C2EFF830C00DEE268 /* XCRemoteSwiftPackageReference "html2md" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "git@github.com:tim-gromeyer/html2md.git";
+			repositoryURL = "https://github.com/tim-gromeyer/html2md.git";
 			requirement = {
 				branch = main;
 				kind = branch;
@@ -648,7 +648,7 @@
 		};
 		493E1D5F2EFF869300DEE268 /* XCRemoteSwiftPackageReference "SwiftAgents" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "git@github.com:iliasaz/SwiftAgents.git";
+			repositoryURL = "https://github.com/iliasaz/SwiftAgents.git";
 			requirement = {
 				branch = main;
 				kind = branch;
