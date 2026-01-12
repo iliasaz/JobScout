@@ -9,44 +9,79 @@ on:
 jobs:
   build-and-test:
     name: Build and Test
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: List available Xcode versions
+      run: ls -la /Applications/ | grep Xcode
+
     - name: Select Xcode version
-      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+      run: |
+        # Use the latest available Xcode
+        XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+        echo "Using Xcode at: $XCODE_PATH"
+        sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
     - name: Show Xcode version
-      run: xcodebuild -version
+      run: |
+        xcodebuild -version
+        swift --version
+
+    - name: Show project info
+      run: |
+        xcodebuild -list -project JobScout.xcodeproj
 
     - name: Resolve Swift Package Dependencies
       run: |
         xcodebuild -resolvePackageDependencies \
           -project JobScout.xcodeproj \
-          -scheme JobScout
+          -scheme JobScout \
+          -clonedSourcePackagesDirPath ./SPM
 
     - name: Build
       run: |
+        set -o pipefail
         xcodebuild build \
           -project JobScout.xcodeproj \
           -scheme JobScout \
           -configuration Debug \
           -destination 'platform=macOS' \
+          -clonedSourcePackagesDirPath ./SPM \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          | xcpretty --color && exit ${PIPESTATUS[0]}
+          2>&1 | tee build.log
+
+        # Check for errors
+        if grep -q "error:" build.log; then
+          echo "Build errors found:"
+          grep "error:" build.log
+          exit 1
+        fi
 
     - name: Run Tests
       run: |
+        set -o pipefail
         xcodebuild test \
           -project JobScout.xcodeproj \
           -scheme JobScout \
           -configuration Debug \
           -destination 'platform=macOS' \
+          -clonedSourcePackagesDirPath ./SPM \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          | xcpretty --color && exit ${PIPESTATUS[0]}
+          2>&1 | tee test.log
+
+    - name: Upload build log on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          build.log
+          test.log
+        retention-days: 7
