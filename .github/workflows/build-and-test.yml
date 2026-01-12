@@ -43,7 +43,7 @@ jobs:
 
     - name: Build
       run: |
-        set -o pipefail
+        # Build and capture ALL output including errors
         xcodebuild build \
           -project JobScout.xcodeproj \
           -scheme JobScout \
@@ -55,16 +55,29 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           2>&1 | tee build.log
 
-        # Check for errors
-        if grep -q "error:" build.log; then
-          echo "Build errors found:"
-          grep "error:" build.log
-          exit 1
+        BUILD_STATUS=${PIPESTATUS[0]}
+
+        # Show last 200 lines of build output on failure
+        if [ $BUILD_STATUS -ne 0 ]; then
+          echo "========================================"
+          echo "BUILD FAILED - Last 200 lines of log:"
+          echo "========================================"
+          tail -200 build.log
+          echo ""
+          echo "========================================"
+          echo "All error: lines:"
+          echo "========================================"
+          grep -i "error:" build.log || echo "No error: lines found"
+          echo ""
+          echo "========================================"
+          echo "All warning: lines:"
+          echo "========================================"
+          grep -i "warning:" build.log | tail -50 || echo "No warning: lines found"
+          exit $BUILD_STATUS
         fi
 
     - name: Run Tests
       run: |
-        set -o pipefail
         xcodebuild test \
           -project JobScout.xcodeproj \
           -scheme JobScout \
