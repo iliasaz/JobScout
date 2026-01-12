@@ -15,7 +15,6 @@
 		494FB8482F03118F00DA64E0 /* StructuredQueriesSQLiteCore in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8472F03118F00DA64E0 /* StructuredQueriesSQLiteCore */; };
 		494FB84A2F03118F00DA64E0 /* StructuredQueriesTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8492F03118F00DA64E0 /* StructuredQueriesTestSupport */; };
 		494FB8742F03164500DA64E0 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 494FB8732F03164500DA64E0 /* GRDB */; };
-		49ZONI022F0B000000DEE268 /* Zoni in Frameworks */ = {isa = PBXBuildFile; productRef = 49ZONI032F0B000000DEE268 /* Zoni */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,7 +70,6 @@
 				494FB8422F03118F00DA64E0 /* StructuredQueries in Frameworks */,
 				494FB8742F03164500DA64E0 /* GRDB in Frameworks */,
 				494FB8462F03118F00DA64E0 /* StructuredQueriesSQLite in Frameworks */,
-				49ZONI022F0B000000DEE268 /* Zoni in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -140,7 +138,6 @@
 				494FB8452F03118F00DA64E0 /* StructuredQueriesSQLite */,
 				494FB8472F03118F00DA64E0 /* StructuredQueriesSQLiteCore */,
 				494FB8732F03164500DA64E0 /* GRDB */,
-				49ZONI032F0B000000DEE268 /* Zoni */,
 			);
 			productName = JobScout;
 			productReference = 493E1D322EFF5EFA00DEE268 /* JobScout.app */;
@@ -230,7 +227,6 @@
 				493E1D5F2EFF869300DEE268 /* XCRemoteSwiftPackageReference "SwiftAgents" */,
 				494FB8402F03118F00DA64E0 /* XCRemoteSwiftPackageReference "swift-structured-queries" */,
 				494FB8722F03164500DA64E0 /* XCRemoteSwiftPackageReference "GRDB" */,
-				49ZONI012F0B000000DEE268 /* XCRemoteSwiftPackageReference "Zoni" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 493E1D332EFF5EFA00DEE268 /* Products */;
@@ -670,14 +666,6 @@
 				kind = branch;
 			};
 		};
-		49ZONI012F0B000000DEE268 /* XCRemoteSwiftPackageReference "Zoni" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/christopherkarani/Zoni";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -720,11 +708,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 494FB8722F03164500DA64E0 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
-		};
-		49ZONI032F0B000000DEE268 /* Zoni */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49ZONI012F0B000000DEE268 /* XCRemoteSwiftPackageReference "Zoni" */;
-			productName = Zoni;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

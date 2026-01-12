@@ -6,53 +6,47 @@
 //
 
 import Foundation
-import Zoni
+import NaturalLanguage
+import PDFKit
 
 /// Service for extracting text from PDF resumes and chunking the text
 actor ResumeTextService {
     static let shared = ResumeTextService()
 
-    private let pdfLoader: PDFLoader
-    private let sentenceChunker: SentenceChunker
+    // Chunking configuration optimized for resume content
+    private let targetChunkSize = 500
+    private let minChunkSize = 50
+    private let maxChunkSize = 1000
 
-    init() {
-        // Initialize PDF loader with default settings
-        self.pdfLoader = PDFLoader(preserveLayout: false)
-
-        // Initialize sentence chunker with settings optimized for resume content
-        // - targetSize: 500 characters (resumes have shorter, denser sections)
-        // - minSize: 50 characters (allow small chunks for headers/short sections)
-        // - maxSize: 1000 characters (keep chunks manageable)
-        // - overlapSentences: 1 (maintain context between chunks)
-        self.sentenceChunker = SentenceChunker(
-            targetSize: 500,
-            minSize: 50,
-            maxSize: 1000,
-            overlapSentences: 1
-        )
-    }
-
-    /// Extract text from PDF data
+    /// Extract text from PDF data using PDFKit
     /// - Parameter pdfData: The raw PDF file data
     /// - Returns: The extracted text content
     /// - Throws: ResumeTextError if extraction fails
     func extractText(from pdfData: Data) async throws -> String {
-        do {
-            let document = try await pdfLoader.load(from: pdfData, metadata: nil)
-            let text = document.content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            guard !text.isEmpty else {
-                throw ResumeTextError.emptyContent
-            }
-
-            return text
-        } catch let error as ZoniError {
-            throw ResumeTextError.extractionFailed(error.localizedDescription)
-        } catch let error as ResumeTextError {
-            throw error
-        } catch {
-            throw ResumeTextError.extractionFailed(error.localizedDescription)
+        guard let pdfDocument = PDFDocument(data: pdfData) else {
+            throw ResumeTextError.extractionFailed("Failed to load PDF document")
         }
+
+        var fullText = ""
+
+        for pageIndex in 0..<pdfDocument.pageCount {
+            guard let page = pdfDocument.page(at: pageIndex) else { continue }
+
+            if let pageText = page.string {
+                if !fullText.isEmpty {
+                    fullText += "\n\n"
+                }
+                fullText += pageText
+            }
+        }
+
+        let trimmedText = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedText.isEmpty else {
+            throw ResumeTextError.emptyContent
+        }
+
+        return trimmedText
     }
 
     /// Chunk the extracted text into smaller segments using sentence-based chunking
@@ -64,22 +58,55 @@ actor ResumeTextService {
             throw ResumeTextError.emptyContent
         }
 
-        do {
-            let chunks = try await sentenceChunker.chunk(text, metadata: nil)
+        // Split text into sentences
+        let sentences = splitIntoSentences(text)
 
-            return chunks.enumerated().map { index, chunk in
-                TextChunk(
-                    index: index,
-                    content: chunk.content,
-                    characterCount: chunk.characterCount,
-                    wordCount: chunk.wordCount
-                )
-            }
-        } catch let error as ZoniError {
-            throw ResumeTextError.chunkingFailed(error.localizedDescription)
-        } catch {
-            throw ResumeTextError.chunkingFailed(error.localizedDescription)
+        guard !sentences.isEmpty else {
+            // If no sentences found, create a single chunk from the whole text
+            return [TextChunk(
+                index: 0,
+                content: text,
+                characterCount: text.count,
+                wordCount: countWords(text)
+            )]
         }
+
+        var chunks: [TextChunk] = []
+        var currentChunk = ""
+        var chunkIndex = 0
+
+        for sentence in sentences {
+            let potentialChunk = currentChunk.isEmpty ? sentence : currentChunk + " " + sentence
+
+            if potentialChunk.count > maxChunkSize && !currentChunk.isEmpty {
+                // Current chunk is full, save it and start new one
+                chunks.append(createChunk(content: currentChunk, index: chunkIndex))
+                chunkIndex += 1
+                currentChunk = sentence
+            } else if potentialChunk.count >= targetChunkSize {
+                // Reached target size, save chunk
+                chunks.append(createChunk(content: potentialChunk, index: chunkIndex))
+                chunkIndex += 1
+                currentChunk = ""
+            } else {
+                // Keep accumulating
+                currentChunk = potentialChunk
+            }
+        }
+
+        // Don't forget the last chunk
+        if !currentChunk.isEmpty {
+            // Merge with previous chunk if too small
+            if currentChunk.count < minChunkSize && !chunks.isEmpty {
+                let lastChunk = chunks.removeLast()
+                let mergedContent = lastChunk.content + " " + currentChunk
+                chunks.append(createChunk(content: mergedContent, index: lastChunk.index))
+            } else {
+                chunks.append(createChunk(content: currentChunk, index: chunkIndex))
+            }
+        }
+
+        return chunks
     }
 
     /// Extract text from PDF and chunk it in one operation
@@ -90,6 +117,40 @@ actor ResumeTextService {
         let text = try await extractText(from: pdfData)
         let chunks = try await chunkText(text)
         return (text, chunks)
+    }
+
+    // MARK: - Private Helpers
+
+    private func splitIntoSentences(_ text: String) -> [String] {
+        var sentences: [String] = []
+
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let sentence = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !sentence.isEmpty {
+                sentences.append(sentence)
+            }
+            return true
+        }
+
+        return sentences
+    }
+
+    private func countWords(_ text: String) -> Int {
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return words.count
+    }
+
+    private func createChunk(content: String, index: Int) -> TextChunk {
+        TextChunk(
+            index: index,
+            content: content,
+            characterCount: content.count,
+            wordCount: countWords(content)
+        )
     }
 }
 
