@@ -53,6 +53,19 @@ struct ContentView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var isSearching = false
 
+    // ScrapingDog LinkedIn search state
+    @State private var showScrapingDogSearch = false
+    @State private var scrapingDogSearchField = ""
+    @State private var scrapingDogLocation: ScrapingDogLocation?
+    @State private var scrapingDogSortBy: ScrapingDogSearchParams.SortBy = .relevant
+    @State private var scrapingDogJobType: ScrapingDogSearchParams.JobType?
+    @State private var scrapingDogExperienceLevel: ScrapingDogSearchParams.ExperienceLevel?
+    @State private var scrapingDogWorkType: ScrapingDogSearchParams.WorkType?
+    @State private var isScrapingDogSearching = false
+    @State private var scrapingDogSearchResults: [ScrapingDogJob] = []
+    @State private var scrapingDogSearchError: String?
+    @State private var scrapingDogSearchInfo: String?
+
     // Observe the analysis service for processing state
     @ObservedObject private var analysisService = JobAnalysisService.shared
 
@@ -61,6 +74,7 @@ struct ContentView: View {
     private let harmonizer = DataHarmonizer()
     private let linkClassifier = LinkClassifier()
     private let urlHistoryService = URLHistoryService.shared
+    private let scrapingDogService = ScrapingDogService.shared
 
     /// All unique categories from loaded jobs
     var availableCategories: [String] {
@@ -236,6 +250,38 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(isLoading || isSaving)
+            }
+
+            // ScrapingDog LinkedIn Search Panel
+            if showScrapingDogSearch {
+                ScrapingDogSearchView(
+                    searchField: $scrapingDogSearchField,
+                    selectedLocation: $scrapingDogLocation,
+                    sortBy: $scrapingDogSortBy,
+                    jobType: $scrapingDogJobType,
+                    experienceLevel: $scrapingDogExperienceLevel,
+                    workType: $scrapingDogWorkType,
+                    isSearching: $isScrapingDogSearching,
+                    onSearch: performScrapingDogSearch,
+                    onClear: clearScrapingDogSearch
+                )
+
+                // ScrapingDog search results info
+                if let error = scrapingDogSearchError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
+                    .font(.caption)
+                }
+
+                if let info = scrapingDogSearchInfo {
+                    Text(info)
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
             }
 
             // Analysis Info
@@ -518,6 +564,20 @@ struct ContentView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    withAnimation {
+                        showScrapingDogSearch.toggle()
+                    }
+                } label: {
+                    Label(
+                        showScrapingDogSearch ? "Hide LinkedIn Search" : "LinkedIn Search",
+                        systemImage: showScrapingDogSearch ? "briefcase.fill" : "briefcase"
+                    )
+                }
+                .help(showScrapingDogSearch ? "Hide LinkedIn job search" : "Search LinkedIn for jobs")
+            }
+
             ToolbarItem(placement: .destructiveAction) {
                 Button {
                     showingClearConfirmation = true
@@ -1142,7 +1202,120 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - ScrapingDog LinkedIn Search
+
+    /// Perform ScrapingDog LinkedIn job search
+    private func performScrapingDogSearch() {
+        guard !scrapingDogSearchField.isEmpty else { return }
+
+        isScrapingDogSearching = true
+        scrapingDogSearchError = nil
+        scrapingDogSearchInfo = nil
+
+        Task {
+            do {
+                let params = ScrapingDogSearchParams(
+                    field: scrapingDogSearchField,
+                    geoid: scrapingDogLocation?.id,
+                    page: 1,
+                    sortBy: scrapingDogSortBy,
+                    jobType: scrapingDogJobType,
+                    experienceLevel: scrapingDogExperienceLevel,
+                    workType: scrapingDogWorkType
+                )
+
+                let results = try await scrapingDogService.searchJobs(params: params)
+
+                await MainActor.run {
+                    scrapingDogSearchResults = results
+                    isScrapingDogSearching = false
+
+                    if results.isEmpty {
+                        scrapingDogSearchInfo = "No jobs found matching your search criteria."
+                    } else {
+                        scrapingDogSearchInfo = "Found \(results.count) jobs. Saving to database..."
+                    }
+                }
+
+                // Save results to database if we have any
+                if !results.isEmpty {
+                    await saveScrapingDogJobs(results)
+                }
+            } catch {
+                await MainActor.run {
+                    isScrapingDogSearching = false
+                    scrapingDogSearchError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Clear ScrapingDog search state
+    private func clearScrapingDogSearch() {
+        scrapingDogSearchResults = []
+        scrapingDogSearchError = nil
+        scrapingDogSearchInfo = nil
+    }
+
+    /// Save ScrapingDog search results to database
+    private func saveScrapingDogJobs(_ jobs: [ScrapingDogJob]) async {
+        // Convert to JobPostings
+        let jobPostings = jobs.compactMap { $0.toJobPosting() }
+
+        guard !jobPostings.isEmpty else {
+            await MainActor.run {
+                scrapingDogSearchInfo = "No valid jobs to save."
+            }
+            return
+        }
+
+        do {
+            // Create a source for ScrapingDog searches
+            let sourceURL = "scrapingdog://search/\(scrapingDogSearchField.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? scrapingDogSearchField)"
+            let source = try await repository.getOrCreateSource(url: sourceURL, name: "LinkedIn Search: \(scrapingDogSearchField)")
+
+            // Save jobs
+            let result = try await repository.saveJobs(jobPostings, sourceId: source.id)
+
+            // Update last fetched timestamp
+            try await repository.updateLastFetched(sourceId: source.id)
+
+            // Get total count
+            let totalCount = try await repository.getJobCount()
+
+            await MainActor.run {
+                savedJobCount = totalCount
+
+                // Build save info message
+                var parts: [String] = []
+                if result.savedCount > 0 {
+                    parts.append("\(result.savedCount) new")
+                }
+                if result.updatedCount > 0 {
+                    parts.append("\(result.updatedCount) updated")
+                }
+                if result.skippedCount > 0 {
+                    parts.append("\(result.skippedCount) skipped")
+                }
+                let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+                scrapingDogSearchInfo = "LinkedIn: \(summary) | Total: \(totalCount)"
+            }
+
+            // Queue saved jobs for analysis
+            if result.savedCount > 0 {
+                await analysisService.queueAllUnanalyzed()
+            }
+
+            // Reload jobs from database to show new results
+            await reloadJobsFromDatabase()
+        } catch {
+            await MainActor.run {
+                scrapingDogSearchError = "Failed to save jobs: \(error.localizedDescription)"
+            }
+        }
+    }
 }
+
 
 // MARK: - Category Filter Button
 

@@ -20,6 +20,10 @@ struct SettingsView: View {
     @State private var enableAnalysis = true
     @State private var maxParallelAnalysis: Int = 3
 
+    // ScrapingDog API key state
+    @State private var scrapingDogAPIKey: String = ""
+    @State private var scrapingDogSaveStatus: SaveStatus = .idle
+
     // Resume upload state
     @State private var currentResume: UserResume?
     @State private var resumeUploadStatus: ResumeUploadStatus = .idle
@@ -89,6 +93,44 @@ struct SettingsView: View {
                 Text("OpenRouter API")
             } footer: {
                 Text("OpenRouter provides access to Claude and other AI models for intelligent data harmonization.")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        SecureField("API Key", text: $scrapingDogAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(isLoading)
+
+                        Button(action: saveScrapingDogAPIKey) {
+                            switch scrapingDogSaveStatus {
+                            case .saving:
+                                ProgressView()
+                                    .controlSize(.small)
+                            case .saved:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            default:
+                                Text("Save")
+                            }
+                        }
+                        .disabled(scrapingDogAPIKey.isEmpty || scrapingDogSaveStatus == .saving)
+                    }
+
+                    Text("Get your API key from [scrapingdog.com](https://www.scrapingdog.com)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if case .error(let message) = scrapingDogSaveStatus {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("ScrapingDog API")
+            } footer: {
+                Text("ScrapingDog enables LinkedIn job search directly within JobScout.")
             }
 
             Section {
@@ -350,6 +392,16 @@ struct SettingsView: View {
                 // Key not found or error - leave empty
             }
 
+            do {
+                if let key = try await keychainService.getScrapingDogAPIKey() {
+                    await MainActor.run {
+                        scrapingDogAPIKey = key
+                    }
+                }
+            } catch {
+                // Key not found or error - leave empty
+            }
+
             await MainActor.run {
                 enableHarmonization = UserDefaults.standard.bool(forKey: "enableHarmonization")
                 // Default to true if not set
@@ -398,6 +450,31 @@ struct SettingsView: View {
             } catch {
                 await MainActor.run {
                     saveStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func saveScrapingDogAPIKey() {
+        scrapingDogSaveStatus = .saving
+
+        Task {
+            do {
+                try await keychainService.saveScrapingDogAPIKey(scrapingDogAPIKey)
+
+                await MainActor.run {
+                    scrapingDogSaveStatus = .saved
+                }
+
+                // Reset status after delay
+                try? await Task.sleep(for: .seconds(2))
+
+                await MainActor.run {
+                    scrapingDogSaveStatus = .idle
+                }
+            } catch {
+                await MainActor.run {
+                    scrapingDogSaveStatus = .error(error.localizedDescription)
                 }
             }
         }
