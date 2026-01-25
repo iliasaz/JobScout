@@ -38,7 +38,7 @@ enum ScrapingDogError: Error, LocalizedError {
 actor ScrapingDogService {
     static let shared = ScrapingDogService()
 
-    private let baseURL = "https://api.scrapingdog.com/linkedin/jobs"
+    private let baseURL = "https://api.scrapingdog.com/jobs/"
     private let keychainService = KeychainService.shared
     private var lastRequestTime: Date?
     private let minimumRequestInterval: TimeInterval = 1.0  // Rate limiting: 1 second between requests

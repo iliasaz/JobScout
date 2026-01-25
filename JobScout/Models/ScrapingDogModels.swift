@@ -38,12 +38,11 @@ struct ScrapingDogSearchParams: Sendable {
 
     /// Job type filter
     enum JobType: String, CaseIterable, Sendable {
-        case fullTime = "F"
-        case partTime = "P"
-        case contract = "C"
-        case temporary = "T"
-        case volunteer = "V"
-        case internship = "I"
+        case fullTime = "full_time"
+        case partTime = "part_time"
+        case contract = "contract"
+        case temporary = "temporary"
+        case volunteer = "volunteer"
 
         var displayName: String {
             switch self {
@@ -52,19 +51,17 @@ struct ScrapingDogSearchParams: Sendable {
             case .contract: return "Contract"
             case .temporary: return "Temporary"
             case .volunteer: return "Volunteer"
-            case .internship: return "Internship"
             }
         }
     }
 
     /// Experience level filter
     enum ExperienceLevel: String, CaseIterable, Sendable {
-        case internship = "1"
-        case entryLevel = "2"
-        case associate = "3"
-        case midSeniorLevel = "4"
-        case director = "5"
-        case executive = "6"
+        case internship = "internship"
+        case entryLevel = "entry_level"
+        case associate = "associate"
+        case midSeniorLevel = "mid_senior_level"
+        case director = "director"
 
         var displayName: String {
             switch self {
@@ -73,16 +70,15 @@ struct ScrapingDogSearchParams: Sendable {
             case .associate: return "Associate"
             case .midSeniorLevel: return "Mid-Senior Level"
             case .director: return "Director"
-            case .executive: return "Executive"
             }
         }
     }
 
     /// Work type filter (remote, hybrid, on-site)
     enum WorkType: String, CaseIterable, Sendable {
-        case onSite = "1"
-        case remote = "2"
-        case hybrid = "3"
+        case onSite = "at_work"
+        case remote = "remote"
+        case hybrid = "hybrid"
 
         var displayName: String {
             switch self {
@@ -114,7 +110,7 @@ struct ScrapingDogSearchParams: Sendable {
         }
 
         if let experienceLevel = experienceLevel {
-            items.append(URLQueryItem(name: "experience_level", value: experienceLevel.rawValue))
+            items.append(URLQueryItem(name: "exp_level", value: experienceLevel.rawValue))
         }
 
         if let workType = workType {
