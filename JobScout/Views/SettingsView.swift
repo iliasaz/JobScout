@@ -24,6 +24,9 @@ struct SettingsView: View {
     @State private var scrapingDogAPIKey: String = ""
     @State private var scrapingDogSaveStatus: SaveStatus = .idle
 
+    // LinkedIn rate limit setting (requests per minute)
+    @State private var linkedInRateLimit: Int = 10
+
     // Resume upload state
     @State private var currentResume: UserResume?
     @State private var resumeUploadStatus: ResumeUploadStatus = .idle
@@ -47,6 +50,12 @@ struct SettingsView: View {
 
     /// Key for storing max rows setting in UserDefaults
     static let maxRowsKey = "maxRowsToIngest"
+
+    /// Key for storing LinkedIn rate limit in UserDefaults (requests per minute)
+    static let linkedInRateLimitKey = "linkedInRateLimit"
+
+    /// Default LinkedIn rate limit (10 requests per minute)
+    static let defaultLinkedInRateLimit = 10
 
     enum SaveStatus: Equatable {
         case idle
@@ -131,6 +140,17 @@ struct SettingsView: View {
                 Text("ScrapingDog API")
             } footer: {
                 Text("ScrapingDog enables LinkedIn job search directly within JobScout.")
+            }
+
+            Section {
+                Stepper("Rate Limit: \(linkedInRateLimit) requests/min", value: $linkedInRateLimit, in: 1...60)
+                    .onChange(of: linkedInRateLimit) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: Self.linkedInRateLimitKey)
+                    }
+            } header: {
+                Text("LinkedIn Fetch Settings")
+            } footer: {
+                Text("Controls how often JobScout fetches LinkedIn pages during analysis. Lower values are safer but slower.")
             }
 
             Section {
@@ -424,6 +444,10 @@ struct SettingsView: View {
 
                 let parallelSetting = UserDefaults.standard.integer(forKey: JobAnalysisService.maxParallelKey)
                 maxParallelAnalysis = parallelSetting > 0 ? parallelSetting : 3
+
+                // Load LinkedIn rate limit setting
+                let rateLimitSetting = UserDefaults.standard.integer(forKey: Self.linkedInRateLimitKey)
+                linkedInRateLimit = rateLimitSetting > 0 ? rateLimitSetting : Self.defaultLinkedInRateLimit
 
                 isLoading = false
             }

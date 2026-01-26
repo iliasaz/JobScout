@@ -459,12 +459,21 @@ struct ContentView: View {
             } else {
                 Table(filteredJobs) {
                     TableColumn("") { job in
-                        HStack(spacing: 0) {
-                            Text(job.isFAANG ? "🔥" : "")
-                            Text(job.isInternship ? "🎓" : "")
+                        HStack(spacing: 2) {
+                            if job.isFAANG {
+                                Text("🔥")
+                            }
+                            if job.isInternship {
+                                Text("🎓")
+                            }
+                            if job.hasEasyApply == true {
+                                Image(systemName: "bolt.fill")
+                                    .foregroundStyle(.orange)
+                                    .help("Easy Apply")
+                            }
                         }
                     }
-                    .width(min: 30, ideal: 40)
+                    .width(min: 40, ideal: 60)
                     TableColumn("Status") { job in
                         JobStatusCell(
                             job: job,

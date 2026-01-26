@@ -65,6 +65,10 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
     // Salary display (populated from JOIN with job_description_analysis)
     var salaryDisplay: String?
 
+    // Easy Apply detection (for LinkedIn jobs)
+    @Column("has_easy_apply")
+    var hasEasyApply: Bool?
+
     /// Convert from in-memory JobPosting
     static func from(_ job: JobPosting, sourceId: Int) -> Draft? {
         // unique_link is required - prefer company link, fall back to aggregator link
@@ -114,7 +118,8 @@ nonisolated struct PersistedJobPosting: Identifiable, Sendable {
             descriptionText: descriptionText,
             analysisStatus: analysisStatus,
             analysisError: analysisError,
-            salaryDisplay: salaryDisplay
+            salaryDisplay: salaryDisplay,
+            hasEasyApply: hasEasyApply
         )
     }
 }

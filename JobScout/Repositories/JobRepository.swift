@@ -596,6 +596,10 @@ actor JobRepository {
             salaryDisplay = salaryInfo.displayString
         }
 
+        // Parse hasEasyApply (NULL = unknown, 0 = false, 1 = true)
+        let hasEasyApplyInt: Int? = row["has_easy_apply"]
+        let hasEasyApply: Bool? = hasEasyApplyInt.map { $0 == 1 }
+
         return PersistedJobPosting(
             id: row["id"],
             sourceId: row["source_id"],
@@ -622,8 +626,22 @@ actor JobRepository {
             analysisStatusRaw: row["analysis_status"],
             analysisError: row["analysis_error"],
             analyzedAt: row["analyzed_at"],
-            salaryDisplay: salaryDisplay
+            salaryDisplay: salaryDisplay,
+            hasEasyApply: hasEasyApply
         )
+    }
+
+    // MARK: - Easy Apply Detection
+
+    /// Update hasEasyApply flag for a job
+    func setEasyApply(jobId: Int, hasEasyApply: Bool) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            try db.execute(sql: """
+                UPDATE job_postings SET has_easy_apply = ?, updated_at = datetime('now') WHERE id = ?
+                """, arguments: [hasEasyApply ? 1 : 0, jobId])
+        }
     }
 
     // MARK: - Apply Tracking

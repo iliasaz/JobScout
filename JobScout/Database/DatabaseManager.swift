@@ -574,6 +574,18 @@ actor DatabaseManager {
             }
         }
 
+        // Migration 14: Add has_easy_apply column for LinkedIn Easy Apply detection
+        migrator.registerMigration("014_AddEasyApply") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            if !columnNames.contains("has_easy_apply") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "has_easy_apply" INTEGER DEFAULT NULL
+                    """)
+            }
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }

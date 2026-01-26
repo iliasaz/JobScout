@@ -39,6 +39,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
     let analysisStatus: AnalysisStatus?  // Status of analysis (pending/processing/completed/failed)
     let analysisError: String?  // Error message if analysis failed
     let salaryDisplay: String?  // Pre-formatted salary string (e.g., "$150k - $200k/yr")
+    let hasEasyApply: Bool?  // True if LinkedIn Easy Apply is available (nil if unknown)
 
     /// True if job has completed analysis with details available
     var hasDetails: Bool { analysisStatus == .completed }
@@ -64,7 +65,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         descriptionText: String? = nil,
         analysisStatus: AnalysisStatus? = nil,
         analysisError: String? = nil,
-        salaryDisplay: String? = nil
+        salaryDisplay: String? = nil,
+        hasEasyApply: Bool? = nil
     ) {
         self.persistedId = persistedId
         self.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,6 +91,7 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
         self.analysisStatus = analysisStatus
         self.analysisError = analysisError
         self.salaryDisplay = salaryDisplay
+        self.hasEasyApply = hasEasyApply
     }
 
     /// Extracts country from location string, defaults to "USA"
@@ -303,7 +306,8 @@ nonisolated struct JobPosting: Codable, Sendable, Identifiable, Hashable {
             descriptionText: self.descriptionText,
             analysisStatus: self.analysisStatus,
             analysisError: self.analysisError,
-            salaryDisplay: self.salaryDisplay
+            salaryDisplay: self.salaryDisplay,
+            hasEasyApply: self.hasEasyApply
         )
     }
 }
