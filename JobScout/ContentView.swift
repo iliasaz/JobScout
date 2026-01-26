@@ -63,7 +63,8 @@ struct ContentView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var isSearching = false
 
-    // ScrapingDog LinkedIn search state
+    // Search panel visibility
+    @State private var showGitHubSearch = false
     @State private var showScrapingDogSearch = false
     @State private var scrapingDogSearchField = ""
     @State private var scrapingDogLocation: ScrapingDogLocation?
@@ -227,49 +228,54 @@ struct ContentView: View {
     @ViewBuilder
     private var mainContent: some View {
         VStack(spacing: 12) {
-            // URL Input
-            HStack {
-                URLComboBox(
-                    text: $urlText,
-                    placeholder: "GitHub README URL",
-                    sources: urlSources,
-                    onDelete: { url in
-                        Task {
-                            await urlHistoryService.removeURL(url)
-                            await loadURLSources()
+            // GitHub URL Input
+            if showGitHubSearch {
+                HStack {
+                    URLComboBox(
+                        text: $urlText,
+                        placeholder: "GitHub README URL",
+                        sources: urlSources,
+                        onDelete: { url in
+                            Task {
+                                await urlHistoryService.removeURL(url)
+                                await loadURLSources()
+                            }
+                        },
+                        onSubmit: {
+                            // When Enter is pressed, fetch the current URL
+                            fetchAndParse()
                         }
-                    },
-                    onSubmit: {
-                        // When Enter is pressed, fetch the current URL
+                    )
+
+                    Button {
                         fetchAndParse()
+                    } label: {
+                        if isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Fetch")
+                        }
                     }
-                )
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading || isSaving)
 
-                Button {
-                    fetchAndParse()
-                } label: {
-                    if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text("Fetch")
+                    Button("Fetch All") {
+                        fetchAllSources()
                     }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isLoading || isSaving)
+                    .buttonStyle(.bordered)
+                    .disabled(isLoading || isSaving || urlSources.isEmpty)
+                    .help("Fetch from all saved sources")
 
-                Button("Fetch All") {
-                    fetchAllSources()
+                    Button("Load Saved") {
+                        loadSavedJobs()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isLoading || isSaving)
                 }
-                .buttonStyle(.bordered)
-                .disabled(isLoading || isSaving || urlSources.isEmpty)
-                .help("Fetch from all saved sources")
-
-                Button("Load Saved") {
-                    loadSavedJobs()
-                }
-                .buttonStyle(.bordered)
-                .disabled(isLoading || isSaving)
+                .padding()
+                .background(Color.green.opacity(0.05))
+                .cornerRadius(12)
             }
 
             // ScrapingDog LinkedIn Search Panel
@@ -595,11 +601,25 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 Button {
                     withAnimation {
+                        showGitHubSearch.toggle()
+                    }
+                } label: {
+                    Label(
+                        showGitHubSearch ? "Hide GitHub" : "GitHub",
+                        systemImage: showGitHubSearch ? "arrow.triangle.branch" : "arrow.triangle.branch"
+                    )
+                }
+                .help(showGitHubSearch ? "Hide GitHub job sources" : "Show GitHub job sources")
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    withAnimation {
                         showScrapingDogSearch.toggle()
                     }
                 } label: {
                     Label(
-                        showScrapingDogSearch ? "Hide LinkedIn Search" : "LinkedIn Search",
+                        showScrapingDogSearch ? "Hide LinkedIn" : "LinkedIn",
                         systemImage: showScrapingDogSearch ? "briefcase.fill" : "briefcase"
                     )
                 }
