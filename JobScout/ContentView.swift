@@ -27,6 +27,15 @@ enum StatusFilter: String, CaseIterable {
     var displayName: String { rawValue }
 }
 
+/// Filter for job source
+enum SourceFilter: String, CaseIterable {
+    case all = "All Sources"
+    case linkedInOnly = "LinkedIn"
+    case githubOnly = "GitHub"
+
+    var displayName: String { rawValue }
+}
+
 struct ContentView: View {
     @State private var urlText = "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md"
     @State private var urlSources: [JobSource] = []
@@ -39,6 +48,7 @@ struct ContentView: View {
     @State private var selectedCategories: Set<String> = []
     @State private var jobTypeFilter: JobTypeFilter = .all
     @State private var statusFilter: StatusFilter = .all
+    @State private var sourceFilter: SourceFilter = .all
     @State private var savedJobCount: Int = 0
     @State private var lastSaveInfo: String?
     @State private var showingClearConfirmation = false
@@ -138,6 +148,16 @@ struct ContentView: View {
         // Filter by selected categories (if any selected)
         if !selectedCategories.isEmpty {
             result = result.filter { selectedCategories.contains($0.category) }
+        }
+
+        // Filter by source
+        switch sourceFilter {
+        case .all:
+            break
+        case .linkedInOnly:
+            result = result.filter { $0.aggregatorName == "LinkedIn" }
+        case .githubOnly:
+            result = result.filter { $0.aggregatorName != "LinkedIn" }
         }
 
         // If using FTS search, results are already sorted by relevance
@@ -374,6 +394,14 @@ struct ContentView: View {
                     }
                     .pickerStyle(.menu)
                     .frame(maxWidth: 200)
+
+                    Picker("Source", selection: $sourceFilter) {
+                        ForEach(SourceFilter.allCases, id: \.self) { filter in
+                            Text(filter.displayName).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 150)
                 }
 
                 // Category filters
