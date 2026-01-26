@@ -32,7 +32,15 @@ final class JobAnalysisService: ObservableObject {
 
     private let repository = JobRepository()
     private let keychainService = KeychainService.shared
+    private let scrapingDogService = ScrapingDogService.shared
     private var analyzer: JobDescriptionAnalyzerAgent?
+
+    // LinkedIn rate limiting
+    private var lastLinkedInFetch: Date?
+    private var linkedInRateLimitPerMinute: Int {
+        let setting = UserDefaults.standard.integer(forKey: SettingsView.linkedInRateLimitKey)
+        return setting > 0 ? setting : SettingsView.defaultLinkedInRateLimit
+    }
 
     /// UserDefaults key for enabling background analysis
     static let enabledKey = "enableBackgroundAnalysis"
@@ -207,16 +215,38 @@ final class JobAnalysisService: ObservableObject {
             // Mark as processing
             try await repository.setAnalysisStatus(jobId: job.id, status: .processing)
 
-            // Fetch job description
-            log.debug("[\(job.id)] Fetching job description")
-            let description = try await fetchJobDescription(for: job)
+            var description: String
+            var linkedInHTML: String?
+
+            // Check if this is a LinkedIn job
+            if job.aggregatorName == "LinkedIn" {
+                log.debug("[\(job.id)] LinkedIn job detected, using ScrapingDog details API")
+
+                // Try ScrapingDog job details API first
+                description = try await fetchLinkedInJobDescription(for: job)
+
+                // Also try to fetch the LinkedIn page for Easy Apply detection
+                linkedInHTML = await fetchLinkedInPageWithRateLimit(for: job)
+
+                // Check for Easy Apply
+                if let html = linkedInHTML {
+                    let hasEasyApply = html.contains("EASY_APPLY_DOCUMENT") || html.contains("easy-apply")
+                    try await repository.setEasyApply(jobId: job.id, hasEasyApply: hasEasyApply)
+                    log.info("[\(job.id)] Easy Apply: \(hasEasyApply)")
+                }
+            } else {
+                // Non-LinkedIn job - use standard fetching
+                log.debug("[\(job.id)] Fetching job description")
+                description = try await fetchJobDescription(for: job)
+            }
+
             log.debug("[\(job.id)] Fetched description: \(description.count) characters")
 
             // Store raw description
             try await repository.saveJobDescription(jobId: job.id, description: description)
 
             // Analyze
-            let result: JobDescriptionAnalysisOutput
+            var result: JobDescriptionAnalysisOutput
             if let analyzer = analyzer {
                 result = try await analyzer.analyze(
                     description: description,
@@ -233,6 +263,14 @@ final class JobAnalysisService: ObservableObject {
                     stock: nil,
                     summary: nil
                 )
+            }
+
+            // If analysis is incomplete and we have LinkedIn HTML, try to extract from it
+            if job.aggregatorName == "LinkedIn",
+               let html = linkedInHTML,
+               (result.summary == nil || result.technologies.isEmpty) {
+                log.debug("[\(job.id)] Attempting fallback extraction from LinkedIn HTML")
+                result = enrichResultFromLinkedInHTML(result, html: html)
             }
 
             // Save results
@@ -258,6 +296,116 @@ final class JobAnalysisService: ObservableObject {
                 error: error.localizedDescription
             )
         }
+    }
+
+    /// Fetch job description from ScrapingDog job details API for LinkedIn jobs
+    private func fetchLinkedInJobDescription(for job: PersistedJobPosting) async throws -> String {
+        // Extract job ID from LinkedIn URL
+        guard let urlString = job.aggregatorLink,
+              let jobId = extractLinkedInJobId(from: urlString) else {
+            log.warning("[\(job.id)] Could not extract LinkedIn job ID, falling back to standard fetch")
+            return try await fetchJobDescription(for: job)
+        }
+
+        do {
+            let details = try await scrapingDogService.fetchJobDetails(jobId: jobId)
+            if let description = details.descriptionText, !description.isEmpty {
+                return description
+            }
+            // If no description from ScrapingDog, fall back
+            log.warning("[\(job.id)] No description from ScrapingDog, falling back to standard fetch")
+            return try await fetchJobDescription(for: job)
+        } catch {
+            log.warning("[\(job.id)] ScrapingDog details API failed: \(error), falling back to standard fetch")
+            return try await fetchJobDescription(for: job)
+        }
+    }
+
+    /// Extract LinkedIn job ID from URL
+    private func extractLinkedInJobId(from urlString: String) -> String? {
+        // LinkedIn URLs typically look like:
+        // https://www.linkedin.com/jobs/view/1234567890
+        // or have job_id parameter
+        if let url = URL(string: urlString) {
+            // Try path component
+            let pathComponents = url.pathComponents
+            if let viewIndex = pathComponents.firstIndex(of: "view"),
+               viewIndex + 1 < pathComponents.count {
+                let jobId = pathComponents[viewIndex + 1]
+                // Remove any query parameters or fragments
+                return jobId.components(separatedBy: "?").first?.components(separatedBy: "#").first
+            }
+        }
+        return nil
+    }
+
+    /// Fetch LinkedIn page with rate limiting for Easy Apply detection
+    private func fetchLinkedInPageWithRateLimit(for job: PersistedJobPosting) async -> String? {
+        guard let urlString = job.aggregatorLink,
+              let url = URL(string: urlString) else {
+            return nil
+        }
+
+        // Enforce rate limit
+        let minInterval = 60.0 / Double(linkedInRateLimitPerMinute)
+        if let lastFetch = lastLinkedInFetch {
+            let elapsed = Date().timeIntervalSince(lastFetch)
+            if elapsed < minInterval {
+                let waitTime = minInterval - elapsed
+                log.debug("[\(job.id)] Rate limiting LinkedIn fetch, waiting \(String(format: "%.1f", waitTime))s")
+                try? await Task.sleep(for: .seconds(waitTime))
+            }
+        }
+        lastLinkedInFetch = Date()
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 15
+            // Add user agent to improve success rate
+            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                log.warning("[\(job.id)] LinkedIn fetch failed with status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                return nil
+            }
+
+            return String(data: data, encoding: .utf8)
+        } catch {
+            log.warning("[\(job.id)] Failed to fetch LinkedIn page: \(error)")
+            return nil
+        }
+    }
+
+    /// Enrich analysis result with data extracted from LinkedIn HTML as fallback
+    private func enrichResultFromLinkedInHTML(_ result: JobDescriptionAnalysisOutput, html: String) -> JobDescriptionAnalysisOutput {
+        // This is a simple fallback - could be enhanced with more sophisticated parsing
+        var enriched = result
+
+        // Try to extract summary from description if not present
+        if enriched.summary == nil {
+            // Look for job description section in HTML
+            if let descRange = html.range(of: "description", options: .caseInsensitive) {
+                let startIndex = descRange.upperBound
+                let searchArea = html[startIndex...]
+                // Extract some text as a basic summary
+                if let text = searchArea.prefix(1000).components(separatedBy: "<").first {
+                    let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if cleanText.count > 50 {
+                        enriched = JobDescriptionAnalysisOutput(
+                            technologies: enriched.technologies,
+                            salary: enriched.salary,
+                            stock: enriched.stock,
+                            summary: String(cleanText.prefix(500))
+                        )
+                    }
+                }
+            }
+        }
+
+        return enriched
     }
 
     private func fetchJobDescription(for job: PersistedJobPosting) async throws -> String {

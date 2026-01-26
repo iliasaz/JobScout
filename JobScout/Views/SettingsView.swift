@@ -20,6 +20,13 @@ struct SettingsView: View {
     @State private var enableAnalysis = true
     @State private var maxParallelAnalysis: Int = 3
 
+    // ScrapingDog API key state
+    @State private var scrapingDogAPIKey: String = ""
+    @State private var scrapingDogSaveStatus: SaveStatus = .idle
+
+    // LinkedIn rate limit setting (requests per minute)
+    @State private var linkedInRateLimit: Int = 10
+
     // Resume upload state
     @State private var currentResume: UserResume?
     @State private var resumeUploadStatus: ResumeUploadStatus = .idle
@@ -43,6 +50,12 @@ struct SettingsView: View {
 
     /// Key for storing max rows setting in UserDefaults
     static let maxRowsKey = "maxRowsToIngest"
+
+    /// Key for storing LinkedIn rate limit in UserDefaults (requests per minute)
+    static let linkedInRateLimitKey = "linkedInRateLimit"
+
+    /// Default LinkedIn rate limit (10 requests per minute)
+    static let defaultLinkedInRateLimit = 10
 
     enum SaveStatus: Equatable {
         case idle
@@ -89,6 +102,55 @@ struct SettingsView: View {
                 Text("OpenRouter API")
             } footer: {
                 Text("OpenRouter provides access to Claude and other AI models for intelligent data harmonization.")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        SecureField("API Key", text: $scrapingDogAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(isLoading)
+
+                        Button(action: saveScrapingDogAPIKey) {
+                            switch scrapingDogSaveStatus {
+                            case .saving:
+                                ProgressView()
+                                    .controlSize(.small)
+                            case .saved:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            default:
+                                Text("Save")
+                            }
+                        }
+                        .disabled(scrapingDogAPIKey.isEmpty || scrapingDogSaveStatus == .saving)
+                    }
+
+                    Text("Get your API key from [scrapingdog.com](https://www.scrapingdog.com)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if case .error(let message) = scrapingDogSaveStatus {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("ScrapingDog API")
+            } footer: {
+                Text("ScrapingDog enables LinkedIn job search directly within JobScout.")
+            }
+
+            Section {
+                Stepper("Rate Limit: \(linkedInRateLimit) requests/min", value: $linkedInRateLimit, in: 1...60)
+                    .onChange(of: linkedInRateLimit) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: Self.linkedInRateLimitKey)
+                    }
+            } header: {
+                Text("LinkedIn Fetch Settings")
+            } footer: {
+                Text("Controls how often JobScout fetches LinkedIn pages during analysis. Lower values are safer but slower.")
             }
 
             Section {
@@ -350,6 +412,16 @@ struct SettingsView: View {
                 // Key not found or error - leave empty
             }
 
+            do {
+                if let key = try await keychainService.getScrapingDogAPIKey() {
+                    await MainActor.run {
+                        scrapingDogAPIKey = key
+                    }
+                }
+            } catch {
+                // Key not found or error - leave empty
+            }
+
             await MainActor.run {
                 enableHarmonization = UserDefaults.standard.bool(forKey: "enableHarmonization")
                 // Default to true if not set
@@ -372,6 +444,10 @@ struct SettingsView: View {
 
                 let parallelSetting = UserDefaults.standard.integer(forKey: JobAnalysisService.maxParallelKey)
                 maxParallelAnalysis = parallelSetting > 0 ? parallelSetting : 3
+
+                // Load LinkedIn rate limit setting
+                let rateLimitSetting = UserDefaults.standard.integer(forKey: Self.linkedInRateLimitKey)
+                linkedInRateLimit = rateLimitSetting > 0 ? rateLimitSetting : Self.defaultLinkedInRateLimit
 
                 isLoading = false
             }
@@ -398,6 +474,31 @@ struct SettingsView: View {
             } catch {
                 await MainActor.run {
                     saveStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func saveScrapingDogAPIKey() {
+        scrapingDogSaveStatus = .saving
+
+        Task {
+            do {
+                try await keychainService.saveScrapingDogAPIKey(scrapingDogAPIKey)
+
+                await MainActor.run {
+                    scrapingDogSaveStatus = .saved
+                }
+
+                // Reset status after delay
+                try? await Task.sleep(for: .seconds(2))
+
+                await MainActor.run {
+                    scrapingDogSaveStatus = .idle
+                }
+            } catch {
+                await MainActor.run {
+                    scrapingDogSaveStatus = .error(error.localizedDescription)
                 }
             }
         }

@@ -35,6 +35,7 @@ actor KeychainService {
 
     private let service = "com.jobscout.api"
     private let openRouterAccount = "openrouter-api-key"
+    private let scrapingDogAccount = "scrapingdog-api-key"
 
     private init() {}
 
@@ -62,6 +63,35 @@ actor KeychainService {
     func hasOpenRouterAPIKey() -> Bool {
         do {
             return try getOpenRouterAPIKey() != nil
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - ScrapingDog API Key
+
+    /// Save the ScrapingDog API key to the keychain
+    /// - Parameter apiKey: The API key to save
+    func saveScrapingDogAPIKey(_ apiKey: String) throws {
+        try save(apiKey: apiKey, account: scrapingDogAccount)
+    }
+
+    /// Retrieve the ScrapingDog API key from the keychain
+    /// - Returns: The stored API key, or nil if not found
+    func getScrapingDogAPIKey() throws -> String? {
+        try retrieve(account: scrapingDogAccount)
+    }
+
+    /// Delete the ScrapingDog API key from the keychain
+    func deleteScrapingDogAPIKey() throws {
+        try delete(account: scrapingDogAccount)
+    }
+
+    /// Check if a ScrapingDog API key is stored
+    /// - Returns: True if an API key is stored
+    func hasScrapingDogAPIKey() -> Bool {
+        do {
+            return try getScrapingDogAPIKey() != nil
         } catch {
             return false
         }

@@ -556,6 +556,36 @@ actor DatabaseManager {
                 """)
         }
 
+        // Migration 13: Add source_type column to job_sources for distinguishing GitHub vs ScrapingDog sources
+        migrator.registerMigration("013_AddSourceType") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_sources)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            if !columnNames.contains("source_type") {
+                // Add source_type column with default 'github'
+                try db.execute(sql: """
+                    ALTER TABLE job_sources ADD COLUMN "source_type" TEXT DEFAULT 'github'
+                    """)
+
+                // Update existing ScrapingDog sources based on URL pattern
+                try db.execute(sql: """
+                    UPDATE job_sources SET source_type = 'scrapingdog' WHERE url LIKE 'scrapingdog://%'
+                    """)
+            }
+        }
+
+        // Migration 14: Add has_easy_apply column for LinkedIn Easy Apply detection
+        migrator.registerMigration("014_AddEasyApply") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(job_postings)")
+            let columnNames = columns.compactMap { $0["name"] as? String }
+
+            if !columnNames.contains("has_easy_apply") {
+                try db.execute(sql: """
+                    ALTER TABLE job_postings ADD COLUMN "has_easy_apply" INTEGER DEFAULT NULL
+                    """)
+            }
+        }
+
         // Run all migrations
         try migrator.migrate(dbQueue)
     }
