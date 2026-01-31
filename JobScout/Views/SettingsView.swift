@@ -24,6 +24,10 @@ struct SettingsView: View {
     @State private var scrapingDogAPIKey: String = ""
     @State private var scrapingDogSaveStatus: SaveStatus = .idle
 
+    // RapidAPI key state
+    @State private var rapidAPIKey: String = ""
+    @State private var rapidAPISaveStatus: SaveStatus = .idle
+
     // LinkedIn rate limit setting (requests per minute)
     @State private var linkedInRateLimit: Int = 10
 
@@ -140,6 +144,44 @@ struct SettingsView: View {
                 Text("ScrapingDog API")
             } footer: {
                 Text("ScrapingDog enables LinkedIn job search directly within JobScout.")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        SecureField("API Key", text: $rapidAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(isLoading)
+
+                        Button(action: saveRapidAPIKey) {
+                            switch rapidAPISaveStatus {
+                            case .saving:
+                                ProgressView()
+                                    .controlSize(.small)
+                            case .saved:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            default:
+                                Text("Save")
+                            }
+                        }
+                        .disabled(rapidAPIKey.isEmpty || rapidAPISaveStatus == .saving)
+                    }
+
+                    Text("Get your API key from [rapidapi.com](https://rapidapi.com/bebity/api/fresh-linkedin-scraper-api)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if case .error(let message) = rapidAPISaveStatus {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("RapidAPI (Fresh LinkedIn Scraper)")
+            } footer: {
+                Text("RapidAPI provides enriched LinkedIn job search with salary data, Easy Apply detection, and more filters.")
             }
 
             Section {
@@ -422,6 +464,16 @@ struct SettingsView: View {
                 // Key not found or error - leave empty
             }
 
+            do {
+                if let key = try await keychainService.getRapidAPIKey() {
+                    await MainActor.run {
+                        rapidAPIKey = key
+                    }
+                }
+            } catch {
+                // Key not found or error - leave empty
+            }
+
             await MainActor.run {
                 enableHarmonization = UserDefaults.standard.bool(forKey: "enableHarmonization")
                 // Default to true if not set
@@ -499,6 +551,31 @@ struct SettingsView: View {
             } catch {
                 await MainActor.run {
                     scrapingDogSaveStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func saveRapidAPIKey() {
+        rapidAPISaveStatus = .saving
+
+        Task {
+            do {
+                try await keychainService.saveRapidAPIKey(rapidAPIKey)
+
+                await MainActor.run {
+                    rapidAPISaveStatus = .saved
+                }
+
+                // Reset status after delay
+                try? await Task.sleep(for: .seconds(2))
+
+                await MainActor.run {
+                    rapidAPISaveStatus = .idle
+                }
+            } catch {
+                await MainActor.run {
+                    rapidAPISaveStatus = .error(error.localizedDescription)
                 }
             }
         }

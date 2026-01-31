@@ -77,6 +77,21 @@ struct ContentView: View {
     @State private var scrapingDogSearchError: String?
     @State private var scrapingDogSearchInfo: String?
 
+    // RapidAPI search state
+    @State private var showRapidAPISearch = false
+    @State private var rapidAPISearchField = ""
+    @State private var rapidAPILocation: ScrapingDogLocation?
+    @State private var rapidAPISortBy: RapidAPISearchParams.SortBy = .relevant
+    @State private var rapidAPIDatePosted: RapidAPISearchParams.DatePosted?
+    @State private var rapidAPIExperienceLevel: RapidAPISearchParams.ExperienceLevel?
+    @State private var rapidAPIRemoteType: RapidAPISearchParams.RemoteType?
+    @State private var rapidAPIJobType: RapidAPISearchParams.JobType?
+    @State private var rapidAPIEasyApplyOnly = false
+    @State private var rapidAPIUnder10Applicants = false
+    @State private var isRapidAPISearching = false
+    @State private var rapidAPISearchError: String?
+    @State private var rapidAPISearchInfo: String?
+
     // Observe the analysis service for processing state
     @ObservedObject private var analysisService = JobAnalysisService.shared
 
@@ -86,6 +101,7 @@ struct ContentView: View {
     private let linkClassifier = LinkClassifier()
     private let urlHistoryService = URLHistoryService.shared
     private let scrapingDogService = ScrapingDogService.shared
+    private let rapidAPIService = RapidAPIService.shared
 
     /// All unique categories from loaded jobs
     var availableCategories: [String] {
@@ -307,6 +323,40 @@ struct ContentView: View {
                     Text(info)
                         .font(.caption)
                         .foregroundStyle(.blue)
+                }
+            }
+
+            // RapidAPI LinkedIn Search Panel
+            if showRapidAPISearch {
+                RapidAPISearchView(
+                    searchField: $rapidAPISearchField,
+                    selectedLocation: $rapidAPILocation,
+                    sortBy: $rapidAPISortBy,
+                    datePosted: $rapidAPIDatePosted,
+                    experienceLevel: $rapidAPIExperienceLevel,
+                    remoteType: $rapidAPIRemoteType,
+                    jobType: $rapidAPIJobType,
+                    easyApplyOnly: $rapidAPIEasyApplyOnly,
+                    under10Applicants: $rapidAPIUnder10Applicants,
+                    isSearching: $isRapidAPISearching,
+                    onSearch: performRapidAPISearch,
+                    onClear: clearRapidAPISearch
+                )
+
+                if let error = rapidAPISearchError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
+                    .font(.caption)
+                }
+
+                if let info = rapidAPISearchInfo {
+                    Text(info)
+                        .font(.caption)
+                        .foregroundStyle(.purple)
                 }
             }
 
@@ -633,6 +683,20 @@ struct ContentView: View {
                     )
                 }
                 .help(showScrapingDogSearch ? "Hide LinkedIn job search" : "Search LinkedIn for jobs")
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    withAnimation {
+                        showRapidAPISearch.toggle()
+                    }
+                } label: {
+                    Label(
+                        showRapidAPISearch ? "Hide RapidAPI" : "RapidAPI",
+                        systemImage: showRapidAPISearch ? "sparkle" : "sparkles"
+                    )
+                }
+                .help(showRapidAPISearch ? "Hide RapidAPI LinkedIn search" : "Search LinkedIn via RapidAPI (salary & Easy Apply)")
             }
 
             ToolbarItem(placement: .destructiveAction) {
@@ -1368,6 +1432,120 @@ struct ContentView: View {
         } catch {
             await MainActor.run {
                 scrapingDogSearchError = "Failed to save jobs: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    // MARK: - RapidAPI LinkedIn Search
+
+    /// Perform RapidAPI LinkedIn job search
+    private func performRapidAPISearch() {
+        guard !rapidAPISearchField.isEmpty else { return }
+
+        isRapidAPISearching = true
+        rapidAPISearchError = nil
+        rapidAPISearchInfo = nil
+
+        Task {
+            do {
+                let params = RapidAPISearchParams(
+                    keyword: rapidAPISearchField,
+                    page: 1,
+                    sortBy: rapidAPISortBy,
+                    datePosted: rapidAPIDatePosted,
+                    geocode: rapidAPILocation?.id,
+                    experienceLevel: rapidAPIExperienceLevel,
+                    remote: rapidAPIRemoteType,
+                    jobType: rapidAPIJobType,
+                    easyApply: rapidAPIEasyApplyOnly ? true : nil,
+                    under10Applicants: rapidAPIUnder10Applicants ? true : nil
+                )
+
+                let response = try await rapidAPIService.searchJobs(params: params)
+                let results = response.data ?? []
+
+                await MainActor.run {
+                    isRapidAPISearching = false
+
+                    if results.isEmpty {
+                        rapidAPISearchInfo = "No jobs found matching your search criteria."
+                    } else {
+                        let totalInfo = response.total.map { " (total: \($0))" } ?? ""
+                        rapidAPISearchInfo = "Found \(results.count) jobs\(totalInfo). Saving to database..."
+                    }
+                }
+
+                if !results.isEmpty {
+                    await saveRapidAPIJobs(results)
+                }
+            } catch {
+                await MainActor.run {
+                    isRapidAPISearching = false
+                    rapidAPISearchError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Clear RapidAPI search state
+    private func clearRapidAPISearch() {
+        rapidAPISearchError = nil
+        rapidAPISearchInfo = nil
+    }
+
+    /// Save RapidAPI search results to database
+    private func saveRapidAPIJobs(_ jobs: [RapidAPIJob]) async {
+        let jobPostings = jobs.compactMap { $0.toJobPosting() }
+
+        guard !jobPostings.isEmpty else {
+            await MainActor.run {
+                rapidAPISearchInfo = "No valid jobs to save."
+            }
+            return
+        }
+
+        do {
+            let sourceURL = "rapidapi://search/\(rapidAPISearchField.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? rapidAPISearchField)"
+            let source = try await repository.getOrCreateSource(url: sourceURL, name: "RapidAPI Search: \(rapidAPISearchField)")
+
+            let result = try await repository.saveJobs(jobPostings, sourceId: source.id)
+
+            try await repository.updateLastFetched(sourceId: source.id)
+
+            // Set Easy Apply status for each job that has it
+            for job in jobs {
+                if let easyApply = job.is_easy_apply, let jobUrl = job.url {
+                    try await repository.setEasyApplyByLink(link: jobUrl, hasEasyApply: easyApply)
+                }
+            }
+
+            let totalCount = try await repository.getJobCount()
+
+            await MainActor.run {
+                savedJobCount = totalCount
+
+                var parts: [String] = []
+                if result.savedCount > 0 {
+                    parts.append("\(result.savedCount) new")
+                }
+                if result.updatedCount > 0 {
+                    parts.append("\(result.updatedCount) updated")
+                }
+                if result.skippedCount > 0 {
+                    parts.append("\(result.skippedCount) skipped")
+                }
+                let summary = parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+                rapidAPISearchInfo = "RapidAPI: \(summary) | Total: \(totalCount)"
+            }
+
+            if result.savedCount > 0 {
+                await analysisService.queueAllUnanalyzed()
+            }
+
+            await reloadJobsFromDatabase()
+        } catch {
+            await MainActor.run {
+                rapidAPISearchError = "Failed to save jobs: \(error.localizedDescription)"
             }
         }
     }

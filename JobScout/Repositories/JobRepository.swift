@@ -219,12 +219,15 @@ actor JobRepository {
 
                 // Try to insert, ignore if duplicate (based on unique_link constraint)
                 do {
+                    // Map hasEasyApply: nil -> NSNull, true -> 1, false -> 0
+                    let hasEasyApplyValue: DatabaseValueConvertible? = job.hasEasyApply.map { $0 ? 1 : 0 }
+
                     try db.execute(sql: """
                         INSERT INTO job_postings (
                             source_id, company, role, location, country, category,
                             company_website, company_link, aggregator_link, aggregator_name, unique_link, date_posted, notes, is_faang, is_internship,
-                            created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                            has_easy_apply, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                         """, arguments: [
                             sourceId,
                             job.company,
@@ -240,7 +243,8 @@ actor JobRepository {
                             job.datePosted,
                             job.notes,
                             job.isFAANG ? 1 : 0,
-                            job.isInternship ? 1 : 0
+                            job.isInternship ? 1 : 0,
+                            hasEasyApplyValue
                         ])
                     savedCount += 1
                 } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
@@ -641,6 +645,17 @@ actor JobRepository {
             try db.execute(sql: """
                 UPDATE job_postings SET has_easy_apply = ?, updated_at = datetime('now') WHERE id = ?
                 """, arguments: [hasEasyApply ? 1 : 0, jobId])
+        }
+    }
+
+    /// Update hasEasyApply flag for a job identified by its unique_link
+    func setEasyApplyByLink(link: String, hasEasyApply: Bool) async throws {
+        let db = try await dbManager.getDatabase()
+
+        try await db.write { db in
+            try db.execute(sql: """
+                UPDATE job_postings SET has_easy_apply = ?, updated_at = datetime('now') WHERE unique_link = ?
+                """, arguments: [hasEasyApply ? 1 : 0, link])
         }
     }
 

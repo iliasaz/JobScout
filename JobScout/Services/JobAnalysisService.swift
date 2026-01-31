@@ -33,6 +33,7 @@ final class JobAnalysisService: ObservableObject {
     private let repository = JobRepository()
     private let keychainService = KeychainService.shared
     private let scrapingDogService = ScrapingDogService.shared
+    private let rapidAPIService = RapidAPIService.shared
     private var analyzer: JobDescriptionAnalyzerAgent?
 
     // LinkedIn rate limiting
@@ -220,19 +221,22 @@ final class JobAnalysisService: ObservableObject {
 
             // Check if this is a LinkedIn job
             if job.aggregatorName == "LinkedIn" {
-                log.debug("[\(job.id)] LinkedIn job detected, using ScrapingDog details API")
+                log.debug("[\(job.id)] LinkedIn job detected, fetching details via API")
 
-                // Try ScrapingDog job details API first
+                // Try RapidAPI first (richer data with salary), then ScrapingDog, then direct fetch
                 description = try await fetchLinkedInJobDescription(for: job)
 
-                // Also try to fetch the LinkedIn page for Easy Apply detection
-                linkedInHTML = await fetchLinkedInPageWithRateLimit(for: job)
+                // Only fetch LinkedIn page for Easy Apply detection if not already set
+                if job.hasEasyApply == nil {
+                    linkedInHTML = await fetchLinkedInPageWithRateLimit(for: job)
 
-                // Check for Easy Apply
-                if let html = linkedInHTML {
-                    let hasEasyApply = html.contains("EASY_APPLY_DOCUMENT") || html.contains("easy-apply")
-                    try await repository.setEasyApply(jobId: job.id, hasEasyApply: hasEasyApply)
-                    log.info("[\(job.id)] Easy Apply: \(hasEasyApply)")
+                    if let html = linkedInHTML {
+                        let hasEasyApply = html.contains("EASY_APPLY_DOCUMENT") || html.contains("easy-apply")
+                        try await repository.setEasyApply(jobId: job.id, hasEasyApply: hasEasyApply)
+                        log.info("[\(job.id)] Easy Apply: \(hasEasyApply)")
+                    }
+                } else {
+                    log.debug("[\(job.id)] Easy Apply already set (\(job.hasEasyApply!)), skipping LinkedIn page fetch")
                 }
             } else {
                 // Non-LinkedIn job - use standard fetching
@@ -298,7 +302,8 @@ final class JobAnalysisService: ObservableObject {
         }
     }
 
-    /// Fetch job description from ScrapingDog job details API for LinkedIn jobs
+    /// Fetch job description from API for LinkedIn jobs
+    /// Tries RapidAPI first (richer data), then ScrapingDog, then direct page fetch
     private func fetchLinkedInJobDescription(for job: PersistedJobPosting) async throws -> String {
         // Extract job ID from LinkedIn URL
         guard let urlString = job.aggregatorLink,
@@ -307,18 +312,36 @@ final class JobAnalysisService: ObservableObject {
             return try await fetchJobDescription(for: job)
         }
 
-        do {
-            let details = try await scrapingDogService.fetchJobDetails(jobId: jobId)
-            if let description = details.descriptionText, !description.isEmpty {
-                return description
+        // 1. Try RapidAPI details API first (if key configured) - richer data with salary
+        if await rapidAPIService.hasAPIKey() {
+            do {
+                let details = try await rapidAPIService.fetchJobDetails(jobId: jobId)
+                if let description = details.description, !description.isEmpty {
+                    log.info("[\(job.id)] Got description from RapidAPI (\(description.count) chars)")
+                    return description
+                }
+                log.warning("[\(job.id)] No description from RapidAPI, trying ScrapingDog")
+            } catch {
+                log.warning("[\(job.id)] RapidAPI details failed: \(error), trying ScrapingDog")
             }
-            // If no description from ScrapingDog, fall back
-            log.warning("[\(job.id)] No description from ScrapingDog, falling back to standard fetch")
-            return try await fetchJobDescription(for: job)
-        } catch {
-            log.warning("[\(job.id)] ScrapingDog details API failed: \(error), falling back to standard fetch")
-            return try await fetchJobDescription(for: job)
         }
+
+        // 2. Try ScrapingDog details API (if key configured) - fallback
+        if await scrapingDogService.hasAPIKey() {
+            do {
+                let details = try await scrapingDogService.fetchJobDetails(jobId: jobId)
+                if let description = details.descriptionText, !description.isEmpty {
+                    log.info("[\(job.id)] Got description from ScrapingDog (\(description.count) chars)")
+                    return description
+                }
+                log.warning("[\(job.id)] No description from ScrapingDog, falling back to standard fetch")
+            } catch {
+                log.warning("[\(job.id)] ScrapingDog details API failed: \(error), falling back to standard fetch")
+            }
+        }
+
+        // 3. Fall back to direct page fetch
+        return try await fetchJobDescription(for: job)
     }
 
     /// Extract LinkedIn job ID from URL
