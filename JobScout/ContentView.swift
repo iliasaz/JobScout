@@ -290,8 +290,7 @@ struct ContentView: View {
                     .disabled(isLoading || isSaving)
                 }
                 .padding()
-                .background(Color.green.opacity(0.05))
-                .cornerRadius(12)
+                .glassBackground(tint: .green)
             }
 
             // ScrapingDog LinkedIn Search Panel
@@ -360,49 +359,15 @@ struct ContentView: View {
                 }
             }
 
-            // Analysis Info
-            if !analysisInfo.isEmpty || isHarmonizing {
-                HStack {
-                    if !analysisInfo.isEmpty {
-                        Text(analysisInfo)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if isHarmonizing {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Harmonizing...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if let harmInfo = harmonizationInfo {
-                        Text(harmInfo)
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    }
-                }
-            }
-
-            // Save Info
-            if let saveInfo = lastSaveInfo {
-                Text(saveInfo)
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
-
-            // Database Status
-            if savedJobCount > 0 {
-                Text("Database: \(savedJobCount) jobs saved")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            // Error Message
-            if let error = errorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.caption)
-            }
+            // Status bar
+            StatusBarView(
+                analysisInfo: analysisInfo,
+                harmonizationInfo: harmonizationInfo,
+                lastSaveInfo: lastSaveInfo,
+                errorMessage: errorMessage,
+                savedJobCount: savedJobCount,
+                isHarmonizing: isHarmonizing
+            )
 
             // Search and Filters
             if !jobs.isEmpty {
@@ -430,8 +395,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(8)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+                .background(.quaternary, in: .rect(cornerRadius: 8))
 
                 // Job type filter (intern/FAANG/all)
                 HStack {
@@ -462,7 +426,7 @@ struct ContentView: View {
 
                 // Category filters
                 if !availableCategories.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollView(.horizontal) {
                         HStack(spacing: 8) {
                             Text("Categories:")
                                 .font(.caption)
@@ -492,6 +456,7 @@ struct ContentView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .scrollIndicators(.hidden)
                 }
 
                 Text("\(filteredJobs.count) jobs\(jobTypeFilter == .all && selectedCategories.isEmpty ? "" : " (filtered)")")
@@ -637,6 +602,8 @@ struct ContentView: View {
                     }
                     .width(min: 80, ideal: 100)
                 }
+                .tableStyle(.inset)
+                .alternatingRowBackgrounds(.enabled)
             }
         }
         .padding()
@@ -665,9 +632,10 @@ struct ContentView: View {
                 } label: {
                     Label(
                         showGitHubSearch ? "Hide GitHub" : "GitHub",
-                        systemImage: showGitHubSearch ? "arrow.triangle.branch" : "arrow.triangle.branch"
+                        systemImage: "arrow.triangle.branch"
                     )
                 }
+                .symbolVariant(showGitHubSearch ? .fill : .none)
                 .help(showGitHubSearch ? "Hide GitHub job sources" : "Show GitHub job sources")
             }
 
@@ -679,9 +647,10 @@ struct ContentView: View {
                 } label: {
                     Label(
                         showScrapingDogSearch ? "Hide LinkedIn" : "LinkedIn",
-                        systemImage: showScrapingDogSearch ? "briefcase.fill" : "briefcase"
+                        systemImage: "briefcase"
                     )
                 }
+                .symbolVariant(showScrapingDogSearch ? .fill : .none)
                 .help(showScrapingDogSearch ? "Hide LinkedIn job search" : "Search LinkedIn for jobs")
             }
 
@@ -693,9 +662,10 @@ struct ContentView: View {
                 } label: {
                     Label(
                         showRapidAPISearch ? "Hide RapidAPI" : "RapidAPI",
-                        systemImage: showRapidAPISearch ? "sparkle" : "sparkles"
+                        systemImage: "sparkles"
                     )
                 }
+                .symbolVariant(showRapidAPISearch ? .fill : .none)
                 .help(showRapidAPISearch ? "Hide RapidAPI LinkedIn search" : "Search LinkedIn via RapidAPI (salary & Easy Apply)")
             }
 
@@ -1552,6 +1522,71 @@ struct ContentView: View {
 }
 
 
+// MARK: - Status Bar View
+
+struct StatusBarView: View {
+    let analysisInfo: String
+    let harmonizationInfo: String?
+    let lastSaveInfo: String?
+    let errorMessage: String?
+    let savedJobCount: Int
+    let isHarmonizing: Bool
+
+    private var hasContent: Bool {
+        !analysisInfo.isEmpty || isHarmonizing || harmonizationInfo != nil
+        || lastSaveInfo != nil || savedJobCount > 0 || errorMessage != nil
+    }
+
+    var body: some View {
+        if hasContent {
+            HStack(spacing: 8) {
+                if !analysisInfo.isEmpty {
+                    Text(analysisInfo)
+                        .foregroundStyle(.secondary)
+                }
+
+                if isHarmonizing {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Harmonizing...")
+                        .foregroundStyle(.secondary)
+                } else if let harmInfo = harmonizationInfo {
+                    divider
+                    Text(harmInfo)
+                        .foregroundStyle(.blue)
+                }
+
+                if let saveInfo = lastSaveInfo {
+                    divider
+                    Text(saveInfo)
+                        .foregroundStyle(.green)
+                }
+
+                if savedJobCount > 0 {
+                    divider
+                    Text("DB: \(savedJobCount) jobs")
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = errorMessage {
+                    divider
+                    Text(error)
+                        .foregroundStyle(.red)
+                }
+            }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quaternary, in: .rect(cornerRadius: 6))
+        }
+    }
+
+    private var divider: some View {
+        Text("·")
+            .foregroundStyle(.quaternary)
+    }
+}
+
 // MARK: - Category Filter Button
 
 struct CategoryFilterButton: View {
@@ -1570,9 +1605,9 @@ struct CategoryFilterButton: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.1))
+            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1))
             .foregroundStyle(isSelected ? Color.accentColor : .primary)
-            .cornerRadius(12)
+            .clipShape(.capsule)
         }
         .buttonStyle(.plain)
     }

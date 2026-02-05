@@ -50,8 +50,7 @@ struct RapidAPISearchView: View {
                     }
                 }
                 .padding(8)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+                .background(.quaternary, in: .rect(cornerRadius: 8))
 
                 Picker("Location", selection: $selectedLocation) {
                     Text("Any Location").tag(nil as ScrapingDogLocation?)
@@ -141,8 +140,7 @@ struct RapidAPISearchView: View {
             }
         }
         .padding()
-        .background(Color.purple.opacity(0.05))
-        .cornerRadius(12)
+        .glassBackground(tint: .purple)
     }
 
     private func clearFilters() {

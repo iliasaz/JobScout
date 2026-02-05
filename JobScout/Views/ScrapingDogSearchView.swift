@@ -46,8 +46,7 @@ struct ScrapingDogSearchView: View {
                 }
             }
             .padding(8)
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
+            .background(.quaternary, in: .rect(cornerRadius: 8))
 
             // Filters row
             HStack(spacing: 12) {
@@ -122,13 +121,13 @@ struct ScrapingDogSearchView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(.blue)
                     .disabled(searchField.isEmpty || isSearching)
                 }
             }
         }
         .padding()
-        .background(Color.blue.opacity(0.05))
-        .cornerRadius(12)
+        .glassBackground(tint: .blue)
     }
 
     private func clearFilters() {

@@ -435,7 +435,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 700)
+        .frame(width: 450, height: 780)
         .onAppear {
             loadSettings()
             loadResume()

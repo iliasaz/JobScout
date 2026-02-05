@@ -42,9 +42,8 @@ struct JobInspectorView: View {
                 .buttonStyle(.plain)
             }
             .padding()
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
+            .background(.ultraThinMaterial)
+            .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -175,7 +174,7 @@ struct JobInspectorView: View {
             }
         }
         .frame(minWidth: 280, maxWidth: 320)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background()
     }
 
     private func statusColor(_ status: JobStatus) -> Color {
@@ -209,6 +208,9 @@ private struct SectionView<Content: View>: View {
                 .textCase(.uppercase)
 
             content
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: .rect(cornerRadius: 10))
         }
     }
 }
@@ -296,11 +298,11 @@ private struct TechBadge: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(isHighlighted ? Color.yellow.opacity(0.4) : badgeColor.opacity(0.15))
+        .background(isHighlighted ? Color.yellow.opacity(0.4) : badgeColor.opacity(0.2))
         .foregroundStyle(badgeColor)
-        .cornerRadius(8)
+        .clipShape(.capsule)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            Capsule()
                 .stroke(isHighlighted ? Color.yellow : Color.clear, lineWidth: 2)
         )
     }
@@ -337,9 +339,9 @@ private struct LinkButton: View {
                 Text(title)
                     .font(.callout)
             }
-            .foregroundStyle(color)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .tint(color)
     }
 }
 

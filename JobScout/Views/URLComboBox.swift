@@ -56,12 +56,12 @@ struct URLComboBox: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color(NSColor.textBackgroundColor))
-        .cornerRadius(6)
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-        )
+        .background(.background)
+        .clipShape(.rect(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.separator)
+        }
     }
 }
 
@@ -152,7 +152,7 @@ struct URLHistoryRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .background(isHovering ? Color.accentColor.opacity(0.1) : Color.clear)
+        .background(isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear))
         .onHover { hovering in
             isHovering = hovering
         }
