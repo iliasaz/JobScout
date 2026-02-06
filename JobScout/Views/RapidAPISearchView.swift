@@ -19,38 +19,26 @@ struct RapidAPISearchView: View {
     @Binding var easyApplyOnly: Bool
     @Binding var under10Applicants: Bool
     @Binding var isSearching: Bool
-
+    
+    let savedSearches: [JobSource]
     var onSearch: () -> Void
     var onClear: () -> Void
-
+    var onSelectSearch: (JobSource) -> Void
+    var onDeleteSearch: (String) -> Void
+    
     var body: some View {
         VStack(spacing: 12) {
-            // Row 1: Search field, Location, Date Posted, Sort By
+            // Row 1: Search field with dropdown, Location, Date Posted, Sort By
             HStack(spacing: 12) {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-
-                    TextField("Job title or keyword...", text: $searchField)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            if !searchField.isEmpty {
-                                onSearch()
-                            }
-                        }
-
-                    if !searchField.isEmpty {
-                        Button {
-                            searchField = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(8)
-                .background(.quaternary, in: .rect(cornerRadius: 8))
+                SearchFieldWithHistoryView(
+                    searchField: $searchField,
+                    placeholder: "Job title or keyword...",
+                    savedSearches: savedSearches,
+                    accentColor: .purple,
+                    onSubmit: onSearch,
+                    onSelectSearch: onSelectSearch,
+                    onDeleteSearch: onDeleteSearch
+                )
 
                 Picker("Location", selection: $selectedLocation) {
                     Text("Any Location").tag(nil as ScrapingDogLocation?)
@@ -140,7 +128,7 @@ struct RapidAPISearchView: View {
             }
         }
         .padding()
-        .glassBackground(tint: .purple)
+        .glassBackground(tint: .orange.opacity(0.5))
     }
 
     private func clearFilters() {
@@ -181,8 +169,28 @@ struct RapidAPISearchView: View {
                 easyApplyOnly: $easyApplyOnly,
                 under10Applicants: $under10Applicants,
                 isSearching: $isSearching,
+                savedSearches: [
+                    JobSource(
+                        id: 1,
+                        url: "https://www.linkedin.com/jobs/search/?keywords=iOS%20Engineer&f_E=mid_senior&f_WT=remote",
+                        name: "iOS Engineer",
+                        sourceType: "rapidapi",
+                        lastFetchedAt: Date(),
+                        createdAt: Date()
+                    ),
+                    JobSource(
+                        id: 2,
+                        url: "https://www.linkedin.com/jobs/search/?keywords=Swift%20Developer&f_AL=true",
+                        name: "Swift Developer",
+                        sourceType: "rapidapi",
+                        lastFetchedAt: Date().addingTimeInterval(-86400),
+                        createdAt: Date()
+                    )
+                ],
                 onSearch: {},
-                onClear: {}
+                onClear: {},
+                onSelectSearch: { _ in },
+                onDeleteSearch: { _ in }
             )
             .padding()
         }

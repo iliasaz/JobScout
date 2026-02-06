@@ -7,6 +7,9 @@
 
 import AppKit
 import SwiftUI
+import Logging
+
+private let log = JobScoutLogger.main
 
 /// Filter for job type (intern/FAANG/all)
 enum JobTypeFilter: String, CaseIterable {
@@ -76,6 +79,7 @@ struct ContentView: View {
     @State private var scrapingDogSearchResults: [ScrapingDogJob] = []
     @State private var scrapingDogSearchError: String?
     @State private var scrapingDogSearchInfo: String?
+    @State private var scrapingDogSavedSearches: [JobSource] = []
 
     // RapidAPI search state
     @State private var showRapidAPISearch = false
@@ -91,6 +95,7 @@ struct ContentView: View {
     @State private var isRapidAPISearching = false
     @State private var rapidAPISearchError: String?
     @State private var rapidAPISearchInfo: String?
+    @State private var rapidAPISavedSearches: [JobSource] = []
 
     // Observe the analysis service for processing state
     @ObservedObject private var analysisService = JobAnalysisService.shared
@@ -290,7 +295,7 @@ struct ContentView: View {
                     .disabled(isLoading || isSaving)
                 }
                 .padding()
-                .glassBackground(tint: .green)
+                .glassBackground(tint: .mint.opacity(0.5))
             }
 
             // ScrapingDog LinkedIn Search Panel
@@ -303,8 +308,11 @@ struct ContentView: View {
                     experienceLevel: $scrapingDogExperienceLevel,
                     workType: $scrapingDogWorkType,
                     isSearching: $isScrapingDogSearching,
+                    savedSearches: scrapingDogSavedSearches,
                     onSearch: performScrapingDogSearch,
-                    onClear: clearScrapingDogSearch
+                    onClear: clearScrapingDogSearch,
+                    onSelectSearch: selectScrapingDogSearch,
+                    onDeleteSearch: deleteScrapingDogSearch
                 )
 
                 // ScrapingDog search results info
@@ -338,8 +346,11 @@ struct ContentView: View {
                     easyApplyOnly: $rapidAPIEasyApplyOnly,
                     under10Applicants: $rapidAPIUnder10Applicants,
                     isSearching: $isRapidAPISearching,
+                    savedSearches: rapidAPISavedSearches,
                     onSearch: performRapidAPISearch,
-                    onClear: clearRapidAPISearch
+                    onClear: clearRapidAPISearch,
+                    onSelectSearch: selectRapidAPISearch,
+                    onDeleteSearch: deleteRapidAPISearch
                 )
 
                 if let error = rapidAPISearchError {
@@ -616,6 +627,8 @@ struct ContentView: View {
                 // Populate default URLs if this is first run
                 await urlHistoryService.populateDefaultsIfNeeded()
                 await loadURLSources()
+                await loadScrapingDogSavedSearches()
+                await loadRapidAPISavedSearches()
 
                 // Auto-fetch from all sources in the background
                 await MainActor.run {
@@ -725,6 +738,7 @@ struct ContentView: View {
                     isSearching = false
                 }
             } catch {
+                log.error("FTS search failed for query '\(query)': \(error.localizedDescription)")
                 await MainActor.run {
                     // Fall back to showing all jobs if FTS fails
                     ftsSearchResults = []
@@ -812,6 +826,7 @@ struct ContentView: View {
                 // Save URL to history after successful fetch
                 await saveURLToHistory(sourceURL)
             } catch {
+                log.error("Failed to fetch from source '\(sourceURL)': \(error.localizedDescription)")
                 errorMessage = "Error: \(error.localizedDescription)"
                 isLoading = false
                 isHarmonizing = false
@@ -861,11 +876,12 @@ struct ContentView: View {
 
         for source in urlSources {
             do {
-                let result = try await fetchAndSaveFromSource(source.url)
+                let result = try await fetchAndSaveFromSource(source)
                 totalNew += result.savedCount
                 totalUpdated += result.updatedCount
                 totalSkipped += result.skippedCount
             } catch {
+                log.error("Failed to fetch from source '\(source.name)': \(error.localizedDescription)")
                 errors.append("\(source.name): \(error.localizedDescription)")
             }
         }
@@ -899,8 +915,13 @@ struct ContentView: View {
     }
 
     /// Fetch and save from a single source URL (used by fetchAllSources)
-    private func fetchAndSaveFromSource(_ sourceURL: String) async throws -> SaveResult {
-        guard let url = rawGitHubURL(from: sourceURL) else {
+    private func fetchAndSaveFromSource(_ source: JobSource) async throws -> SaveResult {
+        // Skip non-GitHub sources (LinkedIn searches are API-based, not fetchable)
+        if source.sourceType != "github" {
+            return SaveResult(savedCount: 0, skippedCount: 0, updatedCount: 0)
+        }
+        
+        guard let url = rawGitHubURL(from: source.url) else {
             throw URLError(.badURL)
         }
 
@@ -922,16 +943,14 @@ struct ContentView: View {
         }
 
         // Harmonize
-        let pageTitle = extractPageTitle(from: content, sourceURL: sourceURL)
+        let pageTitle = extractPageTitle(from: content, sourceURL: source.url)
         let result = await harmonizer.harmonize(
             jobs: parsedJobs,
             pageTitle: pageTitle,
-            pageURL: sourceURL
+            pageURL: source.url
         )
 
-        // Save
-        let sourceName = URL(string: sourceURL)?.lastPathComponent ?? "Unknown"
-        let source = try await repository.getOrCreateSource(url: sourceURL, name: sourceName)
+        // Save using the existing source
         let saveResult = try await repository.saveJobs(result.jobs, sourceId: source.id)
         try await repository.updateLastFetched(sourceId: source.id)
 
@@ -1096,7 +1115,12 @@ struct ContentView: View {
     /// Load URL sources from database
     @MainActor
     private func loadURLSources() async {
-        urlSources = await urlHistoryService.getSources()
+        urlSources = await urlHistoryService.getSources(ofType: "github")
+    }
+    
+    /// Load RapidAPI saved searches
+    private func loadRapidAPISavedSearches() async {
+        rapidAPISavedSearches = await urlHistoryService.getSources(ofType: "rapidapi")
     }
 
     /// Save URL to history (creates or updates source in database)
@@ -1333,6 +1357,7 @@ struct ContentView: View {
                     await saveScrapingDogJobs(results)
                 }
             } catch {
+                log.error("ScrapingDog search failed for '\(scrapingDogSearchField)': \(error.localizedDescription)")
                 await MainActor.run {
                     isScrapingDogSearching = false
                     scrapingDogSearchError = error.localizedDescription
@@ -1346,6 +1371,42 @@ struct ContentView: View {
         scrapingDogSearchResults = []
         scrapingDogSearchError = nil
         scrapingDogSearchInfo = nil
+    }
+    
+    /// Select a saved ScrapingDog search and populate the form
+    private func selectScrapingDogSearch(_ source: JobSource) {
+        guard let params = ScrapingDogSearchParams.fromSourceURL(source.url) else {
+            // Fallback: just set the keyword from the source name
+            scrapingDogSearchField = source.name
+            return
+        }
+        
+        // Populate all search fields from the saved parameters
+        scrapingDogSearchField = params.field
+        scrapingDogSortBy = params.sortBy
+        scrapingDogJobType = params.jobType
+        scrapingDogExperienceLevel = params.experienceLevel
+        scrapingDogWorkType = params.workType
+        
+        // Find matching location by geoid
+        if let geoid = params.geoid {
+            scrapingDogLocation = ScrapingDogLocation.commonLocations.first { $0.id == geoid }
+        } else {
+            scrapingDogLocation = nil
+        }
+    }
+    
+    /// Delete a saved ScrapingDog search
+    private func deleteScrapingDogSearch(_ url: String) {
+        Task {
+            await urlHistoryService.removeURL(url)
+            await loadScrapingDogSavedSearches()
+        }
+    }
+    
+    /// Load ScrapingDog saved searches
+    private func loadScrapingDogSavedSearches() async {
+        scrapingDogSavedSearches = await urlHistoryService.getSources(ofType: "scrapingdog")
     }
 
     /// Save ScrapingDog search results to database
@@ -1361,9 +1422,18 @@ struct ContentView: View {
         }
 
         do {
-            // Create a source for ScrapingDog searches
-            let sourceURL = "scrapingdog://search/\(scrapingDogSearchField.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? scrapingDogSearchField)"
-            let source = try await repository.getOrCreateSource(url: sourceURL, name: "LinkedIn Search: \(scrapingDogSearchField)")
+            // Create a source for ScrapingDog searches with all parameters encoded in URL
+            let searchParams = ScrapingDogSearchParams(
+                field: scrapingDogSearchField,
+                geoid: scrapingDogLocation?.id,
+                sortBy: scrapingDogSortBy,
+                jobType: scrapingDogJobType,
+                experienceLevel: scrapingDogExperienceLevel,
+                workType: scrapingDogWorkType
+            )
+            let sourceURL = searchParams.toSourceURL()
+            let sourceName = searchParams.toDisplayName()
+            let source = try await repository.getOrCreateSource(url: sourceURL, name: sourceName, sourceType: "scrapingdog")
 
             // Save jobs
             let result = try await repository.saveJobs(jobPostings, sourceId: source.id)
@@ -1399,7 +1469,11 @@ struct ContentView: View {
 
             // Reload jobs from database to show new results
             await reloadJobsFromDatabase()
+            
+            // Reload saved searches to show the new/updated search
+            await loadScrapingDogSavedSearches()
         } catch {
+            log.error("Failed to save ScrapingDog jobs: \(error.localizedDescription)")
             await MainActor.run {
                 scrapingDogSearchError = "Failed to save jobs: \(error.localizedDescription)"
             }
@@ -1449,6 +1523,7 @@ struct ContentView: View {
                     await saveRapidAPIJobs(results)
                 }
             } catch {
+                log.error("RapidAPI search failed for '\(rapidAPISearchField)': \(error.localizedDescription)")
                 await MainActor.run {
                     isRapidAPISearching = false
                     rapidAPISearchError = error.localizedDescription
@@ -1461,6 +1536,40 @@ struct ContentView: View {
     private func clearRapidAPISearch() {
         rapidAPISearchError = nil
         rapidAPISearchInfo = nil
+    }
+    
+    /// Select a saved RapidAPI search and populate the form
+    private func selectRapidAPISearch(_ source: JobSource) {
+        guard let params = RapidAPISearchParams.fromSourceURL(source.url) else {
+            // Fallback: just set the keyword from the source name
+            rapidAPISearchField = source.name
+            return
+        }
+        
+        // Populate all search fields from the saved parameters
+        rapidAPISearchField = params.keyword
+        rapidAPISortBy = params.sortBy
+        rapidAPIDatePosted = params.datePosted
+        rapidAPIExperienceLevel = params.experienceLevel
+        rapidAPIRemoteType = params.remote
+        rapidAPIJobType = params.jobType
+        rapidAPIEasyApplyOnly = params.easyApply ?? false
+        rapidAPIUnder10Applicants = params.under10Applicants ?? false
+        
+        // Find matching location by geocode
+        if let geocode = params.geocode {
+            rapidAPILocation = ScrapingDogLocation.commonLocations.first { $0.id == geocode }
+        } else {
+            rapidAPILocation = nil
+        }
+    }
+    
+    /// Delete a saved RapidAPI search
+    private func deleteRapidAPISearch(_ url: String) {
+        Task {
+            await urlHistoryService.removeURL(url)
+            await loadRapidAPISavedSearches()
+        }
     }
 
     /// Save RapidAPI search results to database
@@ -1475,8 +1584,21 @@ struct ContentView: View {
         }
 
         do {
-            let sourceURL = "rapidapi://search/\(rapidAPISearchField.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? rapidAPISearchField)"
-            let source = try await repository.getOrCreateSource(url: sourceURL, name: "RapidAPI Search: \(rapidAPISearchField)")
+            // Create a source for RapidAPI searches with all parameters encoded in URL
+            let searchParams = RapidAPISearchParams(
+                keyword: rapidAPISearchField,
+                sortBy: rapidAPISortBy,
+                datePosted: rapidAPIDatePosted,
+                geocode: rapidAPILocation?.id,
+                experienceLevel: rapidAPIExperienceLevel,
+                remote: rapidAPIRemoteType,
+                jobType: rapidAPIJobType,
+                easyApply: rapidAPIEasyApplyOnly ? true : nil,
+                under10Applicants: rapidAPIUnder10Applicants ? true : nil
+            )
+            let sourceURL = searchParams.toSourceURL()
+            let sourceName = searchParams.toDisplayName()
+            let source = try await repository.getOrCreateSource(url: sourceURL, name: sourceName, sourceType: "rapidapi")
 
             let result = try await repository.saveJobs(jobPostings, sourceId: source.id)
 
@@ -1513,7 +1635,11 @@ struct ContentView: View {
             }
 
             await reloadJobsFromDatabase()
+            
+            // Reload saved searches to show the new/updated search
+            await loadRapidAPISavedSearches()
         } catch {
+            log.error("Failed to save RapidAPI jobs: \(error.localizedDescription)")
             await MainActor.run {
                 rapidAPISearchError = "Failed to save jobs: \(error.localizedDescription)"
             }

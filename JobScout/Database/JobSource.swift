@@ -14,6 +14,8 @@ struct JobSource: Identifiable, Sendable {
     let id: Int
     var url: String
     var name: String
+    @Column("source_type")
+    var sourceType: String
     @Column("last_fetched_at")
     var lastFetchedAt: Date?
     @Column("created_at")

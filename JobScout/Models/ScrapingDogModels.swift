@@ -119,6 +119,79 @@ struct ScrapingDogSearchParams: Sendable {
 
         return items
     }
+    
+    /// Build a LinkedIn-style URL that encodes all search parameters for persistence
+    func toSourceURL() -> String {
+        var components = URLComponents(string: "https://www.linkedin.com/jobs/search/")!
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "keywords", value: field)
+        ]
+        
+        if sortBy != .relevant {
+            queryItems.append(URLQueryItem(name: "f_TPR", value: sortBy.rawValue))
+        }
+        if let geoid = geoid, !geoid.isEmpty {
+            queryItems.append(URLQueryItem(name: "geoId", value: geoid))
+        }
+        if let jobType = jobType {
+            queryItems.append(URLQueryItem(name: "f_JT", value: jobType.rawValue))
+        }
+        if let experienceLevel = experienceLevel {
+            queryItems.append(URLQueryItem(name: "f_E", value: experienceLevel.rawValue))
+        }
+        if let workType = workType {
+            queryItems.append(URLQueryItem(name: "f_WT", value: workType.rawValue))
+        }
+        
+        components.queryItems = queryItems
+        return components.url?.absoluteString ?? "https://www.linkedin.com/jobs/search/?keywords=\(field)"
+    }
+    
+    /// Create a display name for the search
+    func toDisplayName() -> String {
+        var parts: [String] = [field]
+        
+        if let experienceLevel = experienceLevel {
+            parts.append(experienceLevel.displayName)
+        }
+        if let workType = workType {
+            parts.append(workType.displayName)
+        }
+        if let jobType = jobType {
+            parts.append(jobType.displayName)
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+    
+    /// Parse search parameters from a persisted URL
+    static func fromSourceURL(_ urlString: String) -> ScrapingDogSearchParams? {
+        guard let components = URLComponents(string: urlString),
+              let queryItems = components.queryItems else {
+            return nil
+        }
+        
+        var params = [String: String]()
+        for item in queryItems {
+            if let value = item.value {
+                params[item.name] = value
+            }
+        }
+        
+        guard let field = params["keywords"], !field.isEmpty else {
+            return nil
+        }
+        
+        return ScrapingDogSearchParams(
+            field: field,
+            geoid: params["geoId"],
+            page: 1,
+            sortBy: params["f_TPR"].flatMap { SortBy(rawValue: $0) } ?? .relevant,
+            jobType: params["f_JT"].flatMap { JobType(rawValue: $0) },
+            experienceLevel: params["f_E"].flatMap { ExperienceLevel(rawValue: $0) },
+            workType: params["f_WT"].flatMap { WorkType(rawValue: $0) }
+        )
+    }
 }
 
 // MARK: - API Response Models

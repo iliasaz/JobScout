@@ -171,6 +171,7 @@ struct URLHistoryRow: View {
                 id: 1,
                 url: "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md",
                 name: "SimplifyJobs/New-Grad-Positions",
+                sourceType: "github",
                 lastFetchedAt: Date(),
                 createdAt: Date()
             ),
@@ -178,6 +179,7 @@ struct URLHistoryRow: View {
                 id: 2,
                 url: "https://github.com/SimplifyJobs/Summer2025-Internships/blob/dev/README.md",
                 name: "SimplifyJobs/Summer2025-Internships",
+                sourceType: "github",
                 lastFetchedAt: Date().addingTimeInterval(-86400),
                 createdAt: Date()
             ),
@@ -185,6 +187,7 @@ struct URLHistoryRow: View {
                 id: 3,
                 url: "https://github.com/pittcsc/Summer2024-Internships/blob/dev/README.md",
                 name: "pittcsc/Summer2024-Internships",
+                sourceType: "github",
                 lastFetchedAt: nil,
                 createdAt: Date()
             )

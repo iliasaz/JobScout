@@ -162,6 +162,94 @@ struct RapidAPISearchParams: Sendable {
 
         return items
     }
+    
+    /// Build a LinkedIn-style URL that encodes all search parameters for persistence
+    func toSourceURL() -> String {
+        var components = URLComponents(string: "https://www.linkedin.com/jobs/search/")!
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "keywords", value: keyword)
+        ]
+        
+        if sortBy != .relevant {
+            queryItems.append(URLQueryItem(name: "sortBy", value: sortBy.rawValue))
+        }
+        if let datePosted = datePosted {
+            queryItems.append(URLQueryItem(name: "f_TPR", value: datePosted.rawValue))
+        }
+        if let geocode = geocode, !geocode.isEmpty {
+            queryItems.append(URLQueryItem(name: "geoId", value: geocode))
+        }
+        if let experienceLevel = experienceLevel {
+            queryItems.append(URLQueryItem(name: "f_E", value: experienceLevel.rawValue))
+        }
+        if let remote = remote {
+            queryItems.append(URLQueryItem(name: "f_WT", value: remote.rawValue))
+        }
+        if let jobType = jobType {
+            queryItems.append(URLQueryItem(name: "f_JT", value: jobType.rawValue))
+        }
+        if let easyApply = easyApply, easyApply {
+            queryItems.append(URLQueryItem(name: "f_AL", value: "true"))
+        }
+        if let under10Applicants = under10Applicants, under10Applicants {
+            queryItems.append(URLQueryItem(name: "f_EA", value: "true"))
+        }
+        
+        components.queryItems = queryItems
+        return components.url?.absoluteString ?? "https://www.linkedin.com/jobs/search/?keywords=\(keyword)"
+    }
+    
+    /// Create a display name for the search
+    func toDisplayName() -> String {
+        var parts: [String] = [keyword]
+        
+        if let experienceLevel = experienceLevel {
+            parts.append(experienceLevel.displayName)
+        }
+        if let remote = remote {
+            parts.append(remote.displayName)
+        }
+        if let jobType = jobType {
+            parts.append(jobType.displayName)
+        }
+        if easyApply == true {
+            parts.append("Easy Apply")
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+    
+    /// Parse search parameters from a persisted URL
+    static func fromSourceURL(_ urlString: String) -> RapidAPISearchParams? {
+        guard let components = URLComponents(string: urlString),
+              let queryItems = components.queryItems else {
+            return nil
+        }
+        
+        var params = [String: String]()
+        for item in queryItems {
+            if let value = item.value {
+                params[item.name] = value
+            }
+        }
+        
+        guard let keyword = params["keywords"], !keyword.isEmpty else {
+            return nil
+        }
+        
+        return RapidAPISearchParams(
+            keyword: keyword,
+            page: 1,
+            sortBy: params["sortBy"].flatMap { SortBy(rawValue: $0) } ?? .relevant,
+            datePosted: params["f_TPR"].flatMap { DatePosted(rawValue: $0) },
+            geocode: params["geoId"],
+            experienceLevel: params["f_E"].flatMap { ExperienceLevel(rawValue: $0) },
+            remote: params["f_WT"].flatMap { RemoteType(rawValue: $0) },
+            jobType: params["f_JT"].flatMap { JobType(rawValue: $0) },
+            easyApply: params["f_AL"] == "true",
+            under10Applicants: params["f_EA"] == "true"
+        )
+    }
 }
 
 // MARK: - Search Response Models

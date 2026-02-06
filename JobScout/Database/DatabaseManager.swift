@@ -7,6 +7,9 @@
 
 import Foundation
 import GRDB
+import Logging
+
+private let log = JobScoutLogger.database
 
 /// Manages SQLite database connection and migrations
 actor DatabaseManager {
@@ -45,6 +48,7 @@ actor DatabaseManager {
 
         // Database file path
         let dbPath = appDirectory.appendingPathComponent("jobscout.sqlite").path
+        log.info("Database path: \(dbPath)")
 
         // Create database queue
         var config = Configuration()
@@ -53,10 +57,23 @@ actor DatabaseManager {
             try db.execute(sql: "PRAGMA foreign_keys = ON")
         }
 
-        let dbQueue = try DatabaseQueue(path: dbPath, configuration: config)
+        let dbQueue: DatabaseQueue
+        do {
+            dbQueue = try DatabaseQueue(path: dbPath, configuration: config)
+            log.info("Database connection established")
+        } catch {
+            log.error("Failed to open database: \(error.localizedDescription)")
+            throw error
+        }
 
         // Run migrations
-        try await runMigrations(on: dbQueue)
+        do {
+            try await runMigrations(on: dbQueue)
+            log.info("Database migrations completed successfully")
+        } catch {
+            log.error("Database migration failed: \(error.localizedDescription)")
+            throw error
+        }
 
         return dbQueue
     }
@@ -583,6 +600,38 @@ actor DatabaseManager {
                 try db.execute(sql: """
                     ALTER TABLE job_postings ADD COLUMN "has_easy_apply" INTEGER DEFAULT NULL
                     """)
+            }
+        }
+
+        // Migration 15: Convert custom URL schemes to proper LinkedIn URLs
+        migrator.registerMigration("015_FixLinkedInSourceURLs") { db in
+            // Get all sources with custom schemes
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, url FROM job_sources 
+                WHERE url LIKE 'scrapingdog://%' OR url LIKE 'rapidapi://%'
+                """)
+            
+            for row in rows {
+                let id: Int = row["id"]
+                let oldURL: String = row["url"]
+                
+                // Extract the search keyword from the custom URL
+                // Format: scrapingdog://search/keyword or rapidapi://search/keyword
+                var keyword = oldURL
+                if let range = oldURL.range(of: "://search/") {
+                    keyword = String(oldURL[range.upperBound...])
+                }
+                
+                // Build proper LinkedIn search URL
+                let newURL = "https://www.linkedin.com/jobs/search/?keywords=\(keyword)"
+                
+                // Determine source type from old URL
+                let sourceType = oldURL.hasPrefix("scrapingdog://") ? "scrapingdog" : "rapidapi"
+                
+                // Update the source
+                try db.execute(sql: """
+                    UPDATE job_sources SET url = ?, source_type = ? WHERE id = ?
+                    """, arguments: [newURL, sourceType, id])
             }
         }
 

@@ -8,6 +8,9 @@
 import Foundation
 import GRDB
 import StructuredQueries
+import Logging
+
+private let log = JobScoutLogger.database
 
 /// Result of a save operation
 struct SaveResult: Sendable {
@@ -38,7 +41,7 @@ actor JobRepository {
     // MARK: - Job Sources
 
     /// Create or get existing source by URL
-    func getOrCreateSource(url: String, name: String) async throws -> JobSource {
+    func getOrCreateSource(url: String, name: String, sourceType: String = "github") async throws -> JobSource {
         let db = try await dbManager.getDatabase()
 
         return try await db.write { db in
@@ -50,6 +53,7 @@ actor JobRepository {
                     id: existing["id"],
                     url: existing["url"],
                     name: existing["name"],
+                    sourceType: existing["source_type"] ?? "github",
                     lastFetchedAt: existing["last_fetched_at"],
                     createdAt: existing["created_at"]
                 )
@@ -57,9 +61,9 @@ actor JobRepository {
 
             // Create new source
             try db.execute(sql: """
-                INSERT INTO job_sources (url, name, created_at)
-                VALUES (?, ?, datetime('now'))
-                """, arguments: [url, name])
+                INSERT INTO job_sources (url, name, source_type, created_at)
+                VALUES (?, ?, ?, datetime('now'))
+                """, arguments: [url, name, sourceType])
 
             let id = db.lastInsertedRowID
 
@@ -67,6 +71,7 @@ actor JobRepository {
                 id: Int(id),
                 url: url,
                 name: name,
+                sourceType: sourceType,
                 lastFetchedAt: nil,
                 createdAt: Date()
             )
@@ -95,6 +100,7 @@ actor JobRepository {
                     id: row["id"],
                     url: row["url"],
                     name: row["name"],
+                    sourceType: row["source_type"] ?? "github",
                     lastFetchedAt: row["last_fetched_at"],
                     createdAt: row["created_at"]
                 )
@@ -117,6 +123,7 @@ actor JobRepository {
                     id: row["id"],
                     url: row["url"],
                     name: row["name"],
+                    sourceType: row["source_type"] ?? "github",
                     lastFetchedAt: row["last_fetched_at"],
                     createdAt: row["created_at"]
                 )
@@ -142,6 +149,7 @@ actor JobRepository {
                     id: existing["id"],
                     url: existing["url"],
                     name: existing["name"],
+                    sourceType: existing["source_type"] ?? "github",
                     lastFetchedAt: Date(),
                     createdAt: existing["created_at"]
                 )
@@ -160,6 +168,7 @@ actor JobRepository {
                 id: Int(id),
                 url: url,
                 name: sourceName,
+                sourceType: "github",
                 lastFetchedAt: Date(),
                 createdAt: Date()
             )

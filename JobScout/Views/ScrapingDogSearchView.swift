@@ -16,37 +16,25 @@ struct ScrapingDogSearchView: View {
     @Binding var experienceLevel: ScrapingDogSearchParams.ExperienceLevel?
     @Binding var workType: ScrapingDogSearchParams.WorkType?
     @Binding var isSearching: Bool
-
+    
+    let savedSearches: [JobSource]
     var onSearch: () -> Void
     var onClear: () -> Void
-
+    var onSelectSearch: (JobSource) -> Void
+    var onDeleteSearch: (String) -> Void
+    
     var body: some View {
         VStack(spacing: 12) {
-            // Search field row
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-
-                TextField("Job title or company...", text: $searchField)
-                    .textFieldStyle(.plain)
-                    .onSubmit {
-                        if !searchField.isEmpty {
-                            onSearch()
-                        }
-                    }
-
-                if !searchField.isEmpty {
-                    Button {
-                        searchField = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(.quaternary, in: .rect(cornerRadius: 8))
+            // Search field row with dropdown
+            SearchFieldWithHistoryView(
+                searchField: $searchField,
+                placeholder: "Job title or company...",
+                savedSearches: savedSearches,
+                accentColor: .blue,
+                onSubmit: onSearch,
+                onSelectSearch: onSelectSearch,
+                onDeleteSearch: onDeleteSearch
+            )
 
             // Filters row
             HStack(spacing: 12) {
@@ -127,7 +115,7 @@ struct ScrapingDogSearchView: View {
             }
         }
         .padding()
-        .glassBackground(tint: .blue)
+        .glassBackground(tint: .blue.opacity(0.5))
     }
 
     private func clearFilters() {
@@ -159,8 +147,28 @@ struct ScrapingDogSearchView: View {
                 experienceLevel: $experienceLevel,
                 workType: $workType,
                 isSearching: $isSearching,
+                savedSearches: [
+                    JobSource(
+                        id: 1,
+                        url: "https://www.linkedin.com/jobs/search/?keywords=iOS%20Developer&f_E=mid_senior_level&f_WT=remote",
+                        name: "iOS Developer",
+                        sourceType: "scrapingdog",
+                        lastFetchedAt: Date(),
+                        createdAt: Date()
+                    ),
+                    JobSource(
+                        id: 2,
+                        url: "https://www.linkedin.com/jobs/search/?keywords=Swift%20Engineer",
+                        name: "Swift Engineer",
+                        sourceType: "scrapingdog",
+                        lastFetchedAt: Date().addingTimeInterval(-86400),
+                        createdAt: Date()
+                    )
+                ],
                 onSearch: {},
-                onClear: {}
+                onClear: {},
+                onSelectSearch: { _ in },
+                onDeleteSearch: { _ in }
             )
             .padding()
         }

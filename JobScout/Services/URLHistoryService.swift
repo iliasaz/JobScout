@@ -58,6 +58,16 @@ actor URLHistoryService {
             return []
         }
     }
+    
+    /// Get sources filtered by type (github, scrapingdog, rapidapi)
+    func getSources(ofType sourceType: String) async -> [JobSource] {
+        do {
+            let sources = try await repository.getSourcesByRecentUsage(limit: 50)
+            return sources.filter { $0.sourceType == sourceType }
+        } catch {
+            return []
+        }
+    }
 
     /// Add a URL to history (creates or updates the source, moving it to top)
     func addURL(_ url: String) async {
