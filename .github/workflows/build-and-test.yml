@@ -30,6 +30,11 @@ jobs:
         xcodebuild -version
         swift --version
 
+    - name: Configure Xcode for CI (skip macro validation)
+      run: |
+        defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+        defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidation -bool YES
+
     - name: Show project info
       run: |
         xcodebuild -list -project JobScout.xcodeproj
@@ -39,7 +44,9 @@ jobs:
         xcodebuild -resolvePackageDependencies \
           -project JobScout.xcodeproj \
           -scheme JobScout \
-          -clonedSourcePackagesDirPath ./SPM
+          -clonedSourcePackagesDirPath ./SPM \
+          -skipMacroValidation \
+          -skipPackagePluginValidation
 
     - name: Build
       run: |
@@ -50,6 +57,8 @@ jobs:
           -configuration Debug \
           -destination 'platform=macOS' \
           -clonedSourcePackagesDirPath ./SPM \
+          -skipMacroValidation \
+          -skipPackagePluginValidation \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
@@ -84,6 +93,8 @@ jobs:
           -configuration Debug \
           -destination 'platform=macOS' \
           -clonedSourcePackagesDirPath ./SPM \
+          -skipMacroValidation \
+          -skipPackagePluginValidation \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
